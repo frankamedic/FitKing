@@ -30,6 +30,8 @@ class StepKingViewModel: ObservableObject {
     
     private var timer: Timer?
     private var updateTimer: Timer?
+    private var lastProgressCheck: Date = .distantPast
+    private var lastNotificationTime: Date = .distantPast
     
     init() {
         self.settings = TrackingSettings.load()
@@ -39,8 +41,7 @@ class StepKingViewModel: ObservableObject {
     func startTracking() {
         print("Starting step tracking")
         isTracking = true
-        checkProgress() // Immediate check
-        scheduleProgressCheck()
+        updateSteps() // Initial update
         startLiveUpdates()
     }
     
@@ -71,25 +72,28 @@ class StepKingViewModel: ObservableObject {
     }
     
     private func checkProgress() {
+        let now = Date()
+        // Only check progress if enough time has passed
+        guard now.timeIntervalSince(lastProgressCheck) >= (settings.notificationFrequency * 30) else {
+            print("Skipping progress check - too soon since last check")
+            return
+        }
+        
         print("Checking step progress...")
         HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
             guard let self = self else { return }
-            
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("Error getting steps: \(error)")
-                    self.error = error.localizedDescription
-                    return
-                }
-                
-                print("Received step count: \(steps)")
-                self.currentSteps = steps
-                self.analyzeProgress()
+            if let error = error {
+                print("Error getting steps: \(error)")
+                return
             }
+            
+            self.currentSteps = steps
+            self.analyzeProgress(steps: steps)
+            self.lastProgressCheck = now
         }
     }
     
-    private func analyzeProgress() {
+    private func analyzeProgress(steps: Int) {
         print("Analyzing progress with current steps: \(currentSteps)")
         let now = Date()
         
@@ -143,11 +147,49 @@ class StepKingViewModel: ObservableObject {
     }
     
     private func startLiveUpdates() {
-        // Update every 10 seconds when app is active
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
-            print("Performing live update check")
-            self?.checkProgress()
+        // Update UI every 10 seconds
+        updateTimer?.invalidate()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.updateSteps()
         }
+    }
+    
+    private func updateSteps() {
+        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+            guard let self = self else { return }
+            if let error = error {
+                print("Error getting steps: \(error)")
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.currentSteps = steps
+                self.checkNotificationNeeded(steps: steps)
+            }
+        }
+    }
+    
+    private func checkNotificationNeeded(steps: Int) {
+        let now = Date()
+        let minimumInterval = settings.notificationFrequency * 60 // Convert minutes to seconds
+        let timeSinceLastNotification = now.timeIntervalSince(lastNotificationTime)
+        
+        guard timeSinceLastNotification >= minimumInterval else {
+            return // Silently return - no need to log every 10 seconds
+        }
+        
+        // Only log when we're actually considering sending a notification
+        print("""
+            Checking notification timing:
+            - Current time: \(now)
+            - Time since last: \(Int(timeSinceLastNotification)) seconds
+            - Minimum interval: \(Int(minimumInterval)) seconds
+            - Last notification: \(lastNotificationTime)
+            """)
+        
+        // If enough time has passed, analyze progress and maybe send notification
+        analyzeProgress(steps: steps)
+        lastNotificationTime = now
     }
     
     deinit {

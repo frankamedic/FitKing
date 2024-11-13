@@ -177,6 +177,12 @@ class NotificationManager {
     func scheduleBackgroundRefresh() {
         let settings = TrackingSettings.load()
         
+        // Only schedule if we're within the notification window
+        guard settings.isWithinTrackingPeriod() else {
+            print("Outside tracking window - skipping background refresh")
+            return
+        }
+        
         // Check if enough time has passed since last notification
         let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
         let minimumInterval = settings.notificationFrequency * 60 // in seconds
@@ -185,28 +191,18 @@ class NotificationManager {
             let nextAllowedTime = lastNotificationTime.addingTimeInterval(minimumInterval)
             print("""
                 🔄 Skipping background refresh schedule:
-                - Current time: \(Date())
-                - Last notification: \(lastNotificationTime)
-                - Next allowed: \(nextAllowedTime)
-                - Need to wait: \(Int(minimumInterval - timeSinceLastNotification)) seconds
+                - Time since last notification: \(Int(timeSinceLastNotification)) seconds
+                - Next allowed at: \(nextAllowedTime)
                 """)
             return
         }
         
         let request = BGAppRefreshTaskRequest(identifier: "com.sloaninnovation.StepKing.refresh")
-        let intervalInSeconds = settings.notificationFrequency * 60
-        let nextRefreshDate = Date(timeIntervalSinceNow: intervalInSeconds)
-        request.earliestBeginDate = nextRefreshDate
+        request.earliestBeginDate = Date(timeIntervalSinceNow: minimumInterval)
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("""
-                🔄 Background Refresh Scheduled:
-                - Current time: \(Date())
-                - Notification frequency: \(settings.notificationFrequency) minutes
-                - Next refresh scheduled: \(nextRefreshDate)
-                - Interval: \(intervalInSeconds) seconds
-                """)
+            print("🔄 Background refresh scheduled for: \(request.earliestBeginDate ?? Date())")
         } catch {
             print("❌ Could not schedule app refresh: \(error)")
         }
