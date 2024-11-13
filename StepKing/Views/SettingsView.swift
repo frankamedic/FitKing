@@ -61,20 +61,15 @@ struct SettingsView: View {
     
     private func sendTestNotification() {
         print("🔔 Sending test notification...")
-        print("Raw settings end time: \(viewModel.settings.endTime)")
-        print("Today's end time: \(viewModel.settings.todayEndTime)")
-        
         let now = Date()
         let testDate = now.addingTimeInterval(5)
-        
-        print("Current time: \(now)")
-        print("Scheduled time: \(testDate)")
         
         NotificationManager.shared.scheduleStepProgressNotification(
             currentSteps: viewModel.currentSteps,
             goalSteps: viewModel.settings.dailyStepGoal,
             endTime: viewModel.settings.todayEndTime,
-            date: testDate
+            date: testDate,
+            isTest: true
         )
     }
 } 

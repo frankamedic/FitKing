@@ -8,7 +8,7 @@ struct TrackingSettings: Codable {
     
     static let `default` = TrackingSettings(
         startTime: Calendar.current.date(from: DateComponents(hour: 8, minute: 0)) ?? Date(),
-        endTime: Calendar.current.date(from: DateComponents(hour: 19, minute: 0)) ?? Date(),
+        endTime: Calendar.current.date(from: DateComponents(hour: 22, minute: 0)) ?? Date(),
         dailyStepGoal: 10000,
         notificationFrequency: 60
     )
