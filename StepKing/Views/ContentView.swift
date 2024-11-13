@@ -46,8 +46,10 @@ struct ContentView: View {
             case .active:
                 print("App became active")
                 viewModel.startTracking()
-            case .inactive, .background:
+            case .background:
                 print("App entering background")
+                viewModel.stopTracking()
+            case .inactive:
                 viewModel.stopTracking()
             @unknown default:
                 break
