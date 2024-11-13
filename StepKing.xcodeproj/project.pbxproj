@@ -6,6 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		367E48742CE531EB00D237F4 /* widgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 367E485E2CE531EA00D237F4 /* widgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		36C8B9B72CE538C3001FD2C6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48622CE531EA00D237F4 /* SwiftUI.framework */; };
+		36C8B9B82CE538C3001FD2C6 /* SwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48622CE531EA00D237F4 /* SwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		36C8B9BA2CE538C5001FD2C6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48602CE531EA00D237F4 /* WidgetKit.framework */; };
+		36C8B9BB2CE538C5001FD2C6 /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48602CE531EA00D237F4 /* WidgetKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		36C8B9BF2CE5474E001FD2C6 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		367E48172CE5144000D237F4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +30,75 @@
 			remoteGlobalIDString = 367E48052CE5143E00D237F4;
 			remoteInfo = StepKing;
 		};
+		367E48722CE531EB00D237F4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 367E47FE2CE5143E00D237F4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 367E485D2CE531EA00D237F4;
+			remoteInfo = widgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		367E48792CE531EB00D237F4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				367E48742CE531EB00D237F4 /* widgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		36C8B9B92CE538C4001FD2C6 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				36C8B9B82CE538C3001FD2C6 /* SwiftUI.framework in Embed Frameworks */,
+				36C8B9BB2CE538C5001FD2C6 /* WidgetKit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		367E48062CE5143E00D237F4 /* StepKing.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StepKing.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		367E48162CE5144000D237F4 /* StepKingTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StepKingTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		367E48202CE5144000D237F4 /* StepKingUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StepKingUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		367E485E2CE531EA00D237F4 /* widgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = widgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		367E48602CE531EA00D237F4 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		367E48622CE531EA00D237F4 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		367E487A2CE532CF00D237F4 /* widgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = widgetExtension.entitlements; sourceTree = "<group>"; };
+		36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		367E48442CE515B200D237F4 /* Exceptions for "StepKing" folder in "StepKing" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 367E48052CE5143E00D237F4 /* StepKing */;
+		};
+		367E48782CE531EB00D237F4 /* Exceptions for "widget" folder in "widgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 367E485D2CE531EA00D237F4 /* widgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		367E48082CE5143E00D237F4 /* StepKing */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				367E48442CE515B200D237F4 /* Exceptions for "StepKing" folder in "StepKing" target */,
+			);
 			path = StepKing;
 			sourceTree = "<group>";
 		};
@@ -43,6 +110,14 @@
 		367E48232CE5144000D237F4 /* StepKingUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = StepKingUITests;
+			sourceTree = "<group>";
+		};
+		367E48642CE531EA00D237F4 /* widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				367E48782CE531EB00D237F4 /* Exceptions for "widget" folder in "widgetExtension" target */,
+			);
+			path = widget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,15 +144,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		367E485B2CE531EA00D237F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				36C8B9B72CE538C3001FD2C6 /* SwiftUI.framework in Frameworks */,
+				36C8B9BA2CE538C5001FD2C6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		367E47FD2CE5143E00D237F4 = {
 			isa = PBXGroup;
 			children = (
+				36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */,
+				367E487A2CE532CF00D237F4 /* widgetExtension.entitlements */,
 				367E48082CE5143E00D237F4 /* StepKing */,
 				367E48192CE5144000D237F4 /* StepKingTests */,
 				367E48232CE5144000D237F4 /* StepKingUITests */,
+				367E48642CE531EA00D237F4 /* widget */,
+				367E485F2CE531EA00D237F4 /* Frameworks */,
 				367E48072CE5143E00D237F4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,8 +176,18 @@
 				367E48062CE5143E00D237F4 /* StepKing.app */,
 				367E48162CE5144000D237F4 /* StepKingTests.xctest */,
 				367E48202CE5144000D237F4 /* StepKingUITests.xctest */,
+				367E485E2CE531EA00D237F4 /* widgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		367E485F2CE531EA00D237F4 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				367E48602CE531EA00D237F4 /* WidgetKit.framework */,
+				367E48622CE531EA00D237F4 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,10 +200,12 @@
 				367E48022CE5143E00D237F4 /* Sources */,
 				367E48032CE5143E00D237F4 /* Frameworks */,
 				367E48042CE5143E00D237F4 /* Resources */,
+				367E48792CE531EB00D237F4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				367E48732CE531EB00D237F4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				367E48082CE5143E00D237F4 /* StepKing */,
@@ -163,6 +263,29 @@
 			productReference = 367E48202CE5144000D237F4 /* StepKingUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		367E485D2CE531EA00D237F4 /* widgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 367E48752CE531EB00D237F4 /* Build configuration list for PBXNativeTarget "widgetExtension" */;
+			buildPhases = (
+				367E485A2CE531EA00D237F4 /* Sources */,
+				367E485B2CE531EA00D237F4 /* Frameworks */,
+				367E485C2CE531EA00D237F4 /* Resources */,
+				36C8B9B92CE538C4001FD2C6 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				367E48642CE531EA00D237F4 /* widget */,
+			);
+			name = widgetExtension;
+			packageProductDependencies = (
+			);
+			productName = widgetExtension;
+			productReference = 367E485E2CE531EA00D237F4 /* widgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +307,9 @@
 						CreatedOnToolsVersion = 16.1;
 						TestTargetID = 367E48052CE5143E00D237F4;
 					};
+					367E485D2CE531EA00D237F4 = {
+						CreatedOnToolsVersion = 16.1;
+					};
 				};
 			};
 			buildConfigurationList = 367E48012CE5143E00D237F4 /* Build configuration list for PBXProject "StepKing" */;
@@ -203,6 +329,7 @@
 				367E48052CE5143E00D237F4 /* StepKing */,
 				367E48152CE5144000D237F4 /* StepKingTests */,
 				367E481F2CE5144000D237F4 /* StepKingUITests */,
+				367E485D2CE531EA00D237F4 /* widgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -212,6 +339,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				36C8B9BF2CE5474E001FD2C6 /* Launch Screen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -223,6 +351,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		367E481E2CE5144000D237F4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		367E485C2CE531EA00D237F4 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +388,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		367E485A2CE531EA00D237F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +407,11 @@
 			isa = PBXTargetDependency;
 			target = 367E48052CE5143E00D237F4 /* StepKing */;
 			targetProxy = 367E48212CE5144000D237F4 /* PBXContainerItemProxy */;
+		};
+		367E48732CE531EB00D237F4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 367E485D2CE531EA00D237F4 /* widgetExtension */;
+			targetProxy = 367E48722CE531EB00D237F4 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -326,6 +473,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PROJECT_APP_GROUP = group.com.sloaninnovation.StepKing;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -382,6 +530,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PROJECT_APP_GROUP = group.com.sloaninnovation.StepKing;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -393,16 +542,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = StepKing/StepKing.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"StepKing/Preview Content\"";
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StepKing/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your step count data to track your daily progress and help you reach your goals.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your daily progress.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -421,16 +576,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = StepKing/StepKing.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"StepKing/Preview Content\"";
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StepKing/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your step count data to track your daily progress and help you reach your goals.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your daily progress.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -450,6 +611,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
@@ -468,6 +630,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
@@ -512,6 +675,62 @@
 			};
 			name = Release;
 		};
+		367E48762CE531EB00D237F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = widgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = widget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKing.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		367E48772CE531EB00D237F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = widgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5G6TGAR9L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = widget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKing.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -547,6 +766,15 @@
 			buildConfigurations = (
 				367E48312CE5144000D237F4 /* Debug */,
 				367E48322CE5144000D237F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		367E48752CE531EB00D237F4 /* Build configuration list for PBXNativeTarget "widgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				367E48762CE531EB00D237F4 /* Debug */,
+				367E48772CE531EB00D237F4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

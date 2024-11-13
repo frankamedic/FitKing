@@ -2,9 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
+	<key>UIBackgroundModes</key>
 	<array>
-		<string>group.com.sloaninnovation.StepKing</string>
+		<string>fetch</string>
+		<string>processing</string>
 	</array>
 </dict>
 </plist>
