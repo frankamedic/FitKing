@@ -15,12 +15,13 @@ class StepKingViewModel: ObservableObject {
     }
     @Published var currentSteps: Int = 0 {
         didSet {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.sharedDefaults?.setValue(self.currentSteps, forKey: "currentSteps")
-                self.sharedDefaults?.synchronize()
-                print("Saved steps to shared defaults: \(self.currentSteps)")
-                WidgetCenter.shared.reloadAllTimelines()
+            Task {
+                await MainActor.run {
+                    self.sharedDefaults?.setValue(self.currentSteps, forKey: "currentSteps")
+                    self.sharedDefaults?.synchronize()
+                    print("Saved steps to shared defaults: \(self.currentSteps)")
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
             }
         }
     }

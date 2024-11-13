@@ -1,15 +1,9 @@
 import Foundation
 
-extension DefaultStringInterpolation {
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-        return formatter
-    }()
-    
-    mutating func appendInterpolation(_ value: Any) {
-        let timestamp = DefaultStringInterpolation.timeFormatter.string(from: Date())
-        appendLiteral("[\(timestamp)] ")
-        appendLiteral(String(describing: value))
-    }
+// Preserve the original print function
+public func print(_ items: Any..., separator: String = " ", terminator: String = "\n") {
+    let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+    let output = items.map { "\($0)" }.joined(separator: separator)
+    // Use Swift.print directly to avoid recursion
+    Swift.print("[\(timestamp)] \(output)", terminator: terminator)
 } 
