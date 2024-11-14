@@ -58,6 +58,15 @@ struct SettingsView: View {
                     sendTestNotification()
                 }
             }
+            
+            Button(action: {
+                #if DEBUG
+                NotificationManager.shared.simulateBackgroundRefresh()
+                #endif
+            }) {
+                Text("Test Background Refresh")
+            }
+            .padding()
         }
     }
     

@@ -1,8 +1,11 @@
+import Foundation
 import HealthKit
+import WidgetKit
 
 class HealthKitManager {
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
+    private var observerQuery: HKObserverQuery?
     
     func requestAuthorization(completion: @escaping (Bool, Error?) -> Void) {
         print("Requesting HealthKit authorization...")
@@ -73,5 +76,69 @@ class HealthKitManager {
         
         print("Executing HealthKit query...")
         healthStore.execute(query)
+    }
+    
+    func startStepObserver() {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { 
+            print("Failed to create step count type")
+            return 
+        }
+        
+        // Stop any existing query
+        stopStepObserver()
+        
+        let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completion, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("Observer query error: \(error)")
+                completion()
+                return
+            }
+            
+            self.getTodaySteps { steps, error in
+                // Save to shared UserDefaults for widget
+                if let sharedDefaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
+                    sharedDefaults.set(steps, forKey: "currentSteps")
+                    
+                    // Only try to update widget if WidgetKit is available
+                    #if canImport(WidgetKit)
+                    if #available(iOS 14.0, *) {
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
+                    #endif
+                }
+                
+                // Check if notification needed
+                let settings = TrackingSettings.load()
+                NotificationManager.shared.scheduleStepProgressNotification(
+                    currentSteps: steps,
+                    goalSteps: settings.dailyStepGoal,
+                    endTime: settings.todayEndTime,
+                    date: Date()
+                )
+            }
+            
+            completion()
+        }
+        
+        observerQuery = query
+        healthStore.execute(query)
+        
+        // Enable background delivery
+        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
+            if let error = error {
+                print("Failed to enable background delivery: \(error)")
+            } else {
+                print("Successfully enabled background delivery for steps")
+            }
+        }
+    }
+    
+    func stopStepObserver() {
+        if let query = observerQuery {
+            healthStore.stop(query)
+            observerQuery = nil
+        }
     }
 } 

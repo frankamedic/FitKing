@@ -42,14 +42,18 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { newPhase in
+            print("Scene phase changed to: \(newPhase)")
             switch newPhase {
             case .active:
                 print("App became active")
+                HealthKitManager.shared.startStepObserver()
                 viewModel.startTracking()
             case .background:
                 print("App entering background")
+                // Don't stop the observer - let it run in background
                 viewModel.stopTracking()
             case .inactive:
+                print("App becoming inactive")
                 viewModel.stopTracking()
             @unknown default:
                 break

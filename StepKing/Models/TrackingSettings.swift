@@ -14,6 +14,15 @@ struct TrackingSettings: Codable {
     )
     
     // Add this computed property to always get today's date with the configured time
+    var todayStartTime: Date {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        let startTimeComponents = calendar.dateComponents([.hour, .minute], from: startTime)
+        components.hour = startTimeComponents.hour
+        components.minute = startTimeComponents.minute
+        return calendar.date(from: components) ?? Date()
+    }
+    
     var todayEndTime: Date {
         let calendar = Calendar.current
         var components = calendar.dateComponents([.year, .month, .day], from: Date())
@@ -27,8 +36,8 @@ struct TrackingSettings: Codable {
     func isWithinTrackingPeriod(_ date: Date = Date()) -> Bool {
         let calendar = Calendar.current
         let now = calendar.dateComponents([.hour, .minute], from: date)
-        let start = calendar.dateComponents([.hour, .minute], from: startTime)
-        let end = calendar.dateComponents([.hour, .minute], from: endTime)
+        let start = calendar.dateComponents([.hour, .minute], from: todayStartTime)
+        let end = calendar.dateComponents([.hour, .minute], from: todayEndTime)
         
         let nowMinutes = now.hour! * 60 + now.minute!
         let startMinutes = start.hour! * 60 + start.minute!
@@ -42,8 +51,8 @@ struct TrackingSettings: Codable {
         
         let calendar = Calendar.current
         let now = calendar.dateComponents([.hour, .minute], from: date)
-        let start = calendar.dateComponents([.hour, .minute], from: startTime)
-        let end = calendar.dateComponents([.hour, .minute], from: endTime)
+        let start = calendar.dateComponents([.hour, .minute], from: todayStartTime)
+        let end = calendar.dateComponents([.hour, .minute], from: todayEndTime)
         
         let nowMinutes = now.hour! * 60 + now.minute!
         let startMinutes = start.hour! * 60 + start.minute!

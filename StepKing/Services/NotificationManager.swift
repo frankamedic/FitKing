@@ -1,15 +1,19 @@
 import UserNotifications
 import BackgroundTasks
+import UIKit
 
 class NotificationManager {
     static let shared = NotificationManager()
     private var lastNotificationTime: Date = Date.distantPast
+    
+    static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
     
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
                 if granted {
                     print("Notification authorization granted: \(granted)")
+                    self.checkPendingNotifications()
                 } else {
                     print("Notification authorization denied. Error: \(String(describing: error))")
                 }
@@ -18,13 +22,42 @@ class NotificationManager {
     }
     
     func createStepProgressNotification(currentSteps: Int, goalSteps: Int, endTime: Date) -> (title: String, body: String)? {
+        print("📝 Creating step progress notification...")
         let stepsNeeded = goalSteps - currentSteps
-        guard stepsNeeded > 0 else { return nil }
+        print("- Steps needed: \(stepsNeeded)")
+        
+        guard stepsNeeded > 0 else {
+            print("⚠️ No notification needed - already reached goal")
+            return nil
+        }
         
         let hoursRemaining = Date().distance(to: endTime) / 3600
-        guard hoursRemaining > 0 else { return nil }
+        print("- Hours remaining: \(hoursRemaining)")
+        
+        guard hoursRemaining > 0 else {
+            print("⚠️ No notification needed - past end time")
+            return nil
+        }
         
         let stepsPerHour = Int(ceil(Double(stepsNeeded) / hoursRemaining))
+        print("- Required pace: \(stepsPerHour) steps/hour")
+        
+        // Calculate expected progress based on time of day
+        let settings = TrackingSettings.load()
+        let expectedProgress = settings.expectedProgress()
+        let expectedSteps = Int(Double(goalSteps) * expectedProgress)
+        print("""
+            Progress Check:
+            - Expected progress: \(expectedProgress * 100)%
+            - Expected steps: \(expectedSteps)
+            - Current steps: \(currentSteps)
+            """)
+        
+        // Only create notification if behind expected pace
+        guard currentSteps < expectedSteps else {
+            print("⚠️ No notification needed - ahead of pace")
+            return nil
+        }
         
         // Format end time
         let formatter = DateFormatter()
@@ -32,9 +65,17 @@ class NotificationManager {
         formatter.dateStyle = .none
         let formattedEndTime = formatter.string(from: endTime)
         
+        // Add more context to the notification
+        let percentComplete = Int((Double(currentSteps) / Double(goalSteps)) * 100)
+        
+        print("✅ Creating notification content")
         return (
             title: "Step Progress Update",
-            body: "You need to walk about \(stepsPerHour) steps per hour to reach your goal of \(goalSteps) steps by \(formattedEndTime)."
+            body: """
+                Current: \(currentSteps) steps (\(percentComplete)%)
+                Needed: \(stepsNeeded) more steps
+                Pace: \(stepsPerHour) steps/hour to reach \(goalSteps) by \(formattedEndTime)
+                """
         )
     }
     
@@ -45,46 +86,65 @@ class NotificationManager {
         date: Date,
         isTest: Bool = false
     ) {
+        print("""
+            🎯 Attempting to schedule step progress notification:
+            - Current steps: \(currentSteps)
+            - Goal steps: \(goalSteps)
+            - End time: \(endTime)
+            - Schedule date: \(date)
+            - Is test: \(isTest)
+            """)
+        
         if !isTest {
             let settings = TrackingSettings.load()
-            let minimumInterval = settings.notificationFrequency * 60 // Full interval in seconds
+            let minimumInterval = settings.notificationFrequency * 60
             let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
             let nextAllowedNotification = lastNotificationTime.addingTimeInterval(minimumInterval)
             
             print("""
-                ⏰ Notification Request:
+                ⏰ Notification Timing Check:
                 - Current time: \(Date())
-                - User's interval: \(settings.notificationFrequency) minutes
-                - Time since last: \(Int(timeSinceLastNotification)) seconds
-                - Minimum required: \(Int(minimumInterval)) seconds
                 - Last notification: \(lastNotificationTime)
-                - Next allowed: \(nextAllowedNotification)
+                - Time since last: \(Int(timeSinceLastNotification)) seconds
+                - Minimum interval: \(Int(minimumInterval)) seconds
+                - Next allowed at: \(nextAllowedNotification)
                 """)
             
             guard timeSinceLastNotification >= minimumInterval else {
-                print("⚠️ Skipping notification - too soon (need \(Int(minimumInterval - timeSinceLastNotification)) more seconds)")
+                print("⚠️ Too soon for notification - waiting \(Int(minimumInterval - timeSinceLastNotification)) more seconds")
                 return
             }
         }
         
+        print("🔍 Checking if notification content should be created...")
         guard let (title, body) = createStepProgressNotification(
             currentSteps: currentSteps,
             goalSteps: goalSteps,
             endTime: endTime
-        ) else { return }
+        ) else {
+            print("❌ No notification content created - conditions not met")
+            return
+        }
         
+        print("📬 Proceeding to schedule notification with content")
         scheduleNotification(title: title, body: body, date: date)
         
         if !isTest {
             lastNotificationTime = Date()
-            print("✅ Notification scheduled - updated last notification time to: \(lastNotificationTime)")
+            print("⏱️ Updated last notification time to: \(lastNotificationTime)")
         }
     }
     
     func scheduleNotification(title: String, body: String, date: Date) {
         // First check if we have permission
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            print("Notification settings status: \(settings.authorizationStatus.rawValue)")
+            print("""
+                🔔 Attempting to schedule notification:
+                - Title: "\(title)"
+                - Body: "\(body)"
+                - Date: \(date)
+                - Auth Status: \(settings.authorizationStatus.rawValue)
+                """)
             
             guard settings.authorizationStatus == .authorized else {
                 print("Notifications not authorized")
@@ -124,87 +184,300 @@ class NotificationManager {
     }
     
     func registerBackgroundTasks() {
+        print("""
+            🔄 Registering background tasks:
+            - Task identifier: \(Self.backgroundTaskIdentifier)
+            - BGTaskScheduler available: \(UIApplication.shared.backgroundRefreshStatus == .available)
+            - Background modes: \(Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") ?? [])
+            """)
+        
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: "com.sloaninnovation.StepKing.refresh",
-            using: nil
+            forTaskWithIdentifier: Self.backgroundTaskIdentifier,
+            using: .main
         ) { task in
+            print("🎯 Background task handler called")
             self.handleAppRefresh(task: task as! BGAppRefreshTask)
         }
+        print("✅ Background task registration successful")
+        
+        // Schedule initial background refresh
+        scheduleBackgroundRefresh()
     }
     
     private func handleAppRefresh(task: BGAppRefreshTask) {
-        print("📱 Background refresh started at: \(Date())")
+        print("""
+            🔄 Background Refresh Started:
+            - Task identifier: \(task.identifier)
+            - Start time: \(Date())
+            - Last notification: \(lastNotificationTime)
+            - Time since last: \(Int(Date().timeIntervalSince(lastNotificationTime)) / 60) minutes
+            """)
         
-        // Schedule next refresh first
-        scheduleBackgroundRefresh()
+        // Set expiration handler first
+        task.expirationHandler = {
+            print("⚠️ Background task expired before completion")
+            task.setTaskCompleted(success: false)
+        }
+        
+        // Create a timeout
+        let timeoutWorkItem = DispatchWorkItem {
+            print("⚠️ Background task timed out")
+            task.setTaskCompleted(success: false)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: timeoutWorkItem) // 25 second timeout
         
         let settings = TrackingSettings.load()
-        print("📋 Current notification settings: \(settings.notificationFrequency) minutes")
+        print("""
+            📋 Current Settings:
+            - Notification frequency: \(settings.notificationFrequency) minutes
+            - Daily goal: \(settings.dailyStepGoal) steps
+            - Start time: \(settings.startTime)
+            - End time: \(settings.endTime)
+            - Current time in window: \(settings.isWithinTrackingPeriod())
+            """)
         
-        // Get latest steps and check progress
-        HealthKitManager.shared.getTodaySteps { steps, error in
+        // Schedule next refresh first before any potential failures
+        print("📅 Scheduling next background refresh")
+        scheduleBackgroundRefresh()
+        
+        guard settings.isWithinTrackingPeriod() else {
+            print("⏰ Outside tracking period - skipping background check")
+            timeoutWorkItem.cancel()
+            task.setTaskCompleted(success: true)
+            return
+        }
+        
+        print("🏃‍♂️ Requesting current step count...")
+        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+            // Cancel the timeout since we got a response
+            timeoutWorkItem.cancel()
+            
+            guard let self = self else {
+                print("❌ Self was deallocated")
+                task.setTaskCompleted(success: false)
+                return
+            }
+            
             if let error = error {
-                print("❌ Error getting steps in background: \(error)")
+                print("❌ HealthKit error: \(error.localizedDescription)")
                 task.setTaskCompleted(success: false)
                 return
             }
             
             print("""
-                📊 Background Check:
+                📊 Step Progress:
                 - Current steps: \(steps)
                 - Goal: \(settings.dailyStepGoal)
-                - Time: \(Date())
+                - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
+                - Remaining: \(max(0, settings.dailyStepGoal - steps))
                 """)
             
-            // Calculate if notification is needed
-            let stepsNeeded = settings.dailyStepGoal - steps
-            let hoursRemaining = Date().distance(to: settings.todayEndTime) / 3600
+            print("🔔 Attempting to schedule notification...")
+            self.scheduleStepProgressNotification(
+                currentSteps: steps,
+                goalSteps: settings.dailyStepGoal,
+                endTime: settings.todayEndTime,
+                date: Date()
+            )
             
-            if hoursRemaining > 0 && stepsNeeded > 0 {
-                let requiredPace = Int(ceil(Double(stepsNeeded) / hoursRemaining))
-                self.scheduleStepProgressNotification(
-                    currentSteps: steps,
-                    goalSteps: settings.dailyStepGoal,
-                    endTime: settings.todayEndTime,
-                    date: Date()
-                )
-            }
-            
+            print("✅ Background refresh completed")
             task.setTaskCompleted(success: true)
         }
     }
     
-    func scheduleBackgroundRefresh() {
+    func scheduleBackgroundRefresh(force: Bool = false) {
+        print("🔄 Attempting to schedule background refresh (force: \(force))...")
+        
+        // Only check app state if not forced
+        if !force {
+            guard UIApplication.shared.applicationState != .active else {
+                print("📱 App is active - skipping background refresh schedule")
+                return
+            }
+        }
+        
         let settings = TrackingSettings.load()
         
-        // Only schedule if we're within the notification window
+        print("""
+            📋 Background Refresh Context:
+            - Current time: \(Date())
+            - Within tracking period: \(settings.isWithinTrackingPeriod())
+            - Start time: \(settings.startTime)
+            - End time: \(settings.endTime)
+            - App state: \(UIApplication.shared.applicationState.rawValue)
+            - Force schedule: \(force)
+            """)
+        
         guard settings.isWithinTrackingPeriod() else {
-            print("Outside tracking window - skipping background refresh")
+            print("⏰ Outside tracking window - skipping background refresh schedule")
             return
         }
         
-        // Check if enough time has passed since last notification
-        let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
-        let minimumInterval = settings.notificationFrequency * 60 // in seconds
-        
-        guard timeSinceLastNotification >= minimumInterval else {
-            let nextAllowedTime = lastNotificationTime.addingTimeInterval(minimumInterval)
-            print("""
-                🔄 Skipping background refresh schedule:
-                - Time since last notification: \(Int(timeSinceLastNotification)) seconds
-                - Next allowed at: \(nextAllowedTime)
-                """)
-            return
-        }
-        
-        let request = BGAppRefreshTaskRequest(identifier: "com.sloaninnovation.StepKing.refresh")
-        request.earliestBeginDate = Date(timeIntervalSinceNow: minimumInterval)
-        
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            print("🔄 Background refresh scheduled for: \(request.earliestBeginDate ?? Date())")
-        } catch {
-            print("❌ Could not schedule app refresh: \(error)")
+        // Clear any existing background tasks first
+        BGTaskScheduler.shared.getPendingTaskRequests { requests in
+            requests.forEach { request in
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                print("🗑️ Cancelled existing task: \(request.identifier)")
+            }
+            
+            // Schedule new task after cancelling existing ones
+            self.submitBackgroundTask(settings: settings)
         }
     }
+    
+    private func submitBackgroundTask(settings: TrackingSettings) {
+        let minimumInterval = settings.notificationFrequency * 60
+        let nextCheckDate = Date(timeIntervalSinceNow: minimumInterval)
+        
+        // Submit multiple requests with staggered times
+        let intervals = [
+            minimumInterval,
+            minimumInterval + 300,  // +5 minutes
+            minimumInterval + 600   // +10 minutes
+        ]
+        
+        for interval in intervals {
+            let checkDate = Date(timeIntervalSinceNow: interval)
+            let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
+            request.earliestBeginDate = checkDate
+            
+            print("""
+                📅 Submitting refresh request:
+                - Identifier: \(request.identifier)
+                - Current time: \(Date())
+                - Next check: \(checkDate)
+                - Interval: \(interval) seconds
+                """)
+            
+            do {
+                try BGTaskScheduler.shared.submit(request)
+                print("✅ Background refresh scheduled for: \(checkDate)")
+            } catch {
+                print("""
+                    ❌ Failed to schedule refresh:
+                    - Error: \(error.localizedDescription)
+                    - Error code: \(error._code)
+                    - Error domain: \(error._domain)
+                    """)
+            }
+        }
+        
+        // Verify scheduled tasks
+        BGTaskScheduler.shared.getPendingTaskRequests { requests in
+            print("""
+                📋 Pending Background Tasks:
+                Total count: \(requests.count)
+                \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
+                """)
+        }
+    }
+    
+    func checkPendingNotifications() {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            print("""
+                📋 Pending Notifications:
+                \(requests.map { "- Title: \"\($0.content.title)\", Body: \"\($0.content.body)\"" }.joined(separator: "\n"))
+                """)
+        }
+    }
+    
+    // Add this method to handle app state changes
+    func handleAppStateChange(to state: UIApplication.State) {
+        print("""
+            📱 App State Changed:
+            - New state: \(state.rawValue)
+            - Current time: \(Date())
+            """)
+        
+        debugBackgroundStatus()
+        
+        switch state {
+        case .background:
+            print("📲 App entered background - scheduling refresh task")
+            scheduleBackgroundRefresh(force: true)
+        case .active:
+            print("📲 App became active - cancelling background tasks")
+            BGTaskScheduler.shared.getPendingTaskRequests { requests in
+                requests.forEach { request in
+                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                    print("🗑️ Cancelled background task: \(request.identifier)")
+                }
+            }
+        default:
+            break
+        }
+    }
+    
+    // Add this method to NotificationManager class
+    private func debugBackgroundStatus() {
+        print("""
+            🔍 Background Status Check:
+            - Background refresh available: \(UIApplication.shared.backgroundRefreshStatus == .available)
+            - Current app state: \(UIApplication.shared.applicationState.rawValue)
+            - Last notification time: \(lastNotificationTime)
+            - Background modes: \(Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") ?? [])
+            """)
+        
+        BGTaskScheduler.shared.getPendingTaskRequests { requests in
+            print("""
+                📋 Current Background Tasks:
+                Total count: \(requests.count)
+                \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
+                """)
+        }
+    }
+    
+    #if DEBUG
+    func simulateBackgroundRefresh() {
+        print("🔬 Simulating background refresh...")
+        print("🎯 Background task handler called (simulated)")
+        
+        // Get settings and check if we're in tracking period
+        let settings = TrackingSettings.load()
+        print("""
+            📋 Current Settings:
+            - Notification frequency: \(settings.notificationFrequency) minutes
+            - Daily goal: \(settings.dailyStepGoal) steps
+            - Start time: \(settings.startTime)
+            - End time: \(settings.endTime)
+            - Current time in window: \(settings.isWithinTrackingPeriod())
+            """)
+        
+        guard settings.isWithinTrackingPeriod() else {
+            print("⏰ Outside tracking period - skipping background check")
+            return
+        }
+        
+        print("🏃‍♂️ Requesting current step count...")
+        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+            guard let self = self else {
+                print("❌ Self was deallocated")
+                return
+            }
+            
+            if let error = error {
+                print("❌ HealthKit error: \(error.localizedDescription)")
+                return
+            }
+            
+            print("""
+                📊 Step Progress:
+                - Current steps: \(steps)
+                - Goal: \(settings.dailyStepGoal)
+                - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
+                - Remaining: \(max(0, settings.dailyStepGoal - steps))
+                """)
+            
+            print("🔔 Attempting to schedule notification...")
+            self.scheduleStepProgressNotification(
+                currentSteps: steps,
+                goalSteps: settings.dailyStepGoal,
+                endTime: settings.todayEndTime,
+                date: Date()
+            )
+            
+            print("✅ Simulated background refresh completed")
+        }
+    }
+    #endif
 } 
