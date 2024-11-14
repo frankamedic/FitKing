@@ -44,6 +44,8 @@ struct SettingsView: View {
                         set: { viewModel.settings.notificationFrequency = $0 }
                     )
                 ) {
+                    Text("1 minute").tag(TimeInterval(1))
+                    Text("5 minutes").tag(TimeInterval(5))
                     Text("15 minutes").tag(TimeInterval(15))
                     Text("30 minutes").tag(TimeInterval(30))
                     Text("1 hour").tag(TimeInterval(60))
