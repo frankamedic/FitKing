@@ -4,9 +4,29 @@ import UIKit
 
 class NotificationManager {
     static let shared = NotificationManager()
-    private var lastNotificationTime: Date = Date.distantPast
+    public private(set) var lastNotificationTime: Date = Date.distantPast
     
     static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
+    
+    var nextNotificationTime: Date? {
+        let settings = TrackingSettings.load()
+        
+        // If we're outside tracking period, return nil
+        guard settings.isWithinTrackingPeriod() else {
+            return nil
+        }
+        
+        // Calculate next notification time based on frequency
+        let minimumInterval = settings.notificationFrequency * 60
+        let nextTime = lastNotificationTime.addingTimeInterval(minimumInterval)
+        
+        // If next time would be after end time, return nil
+        if nextTime > settings.todayEndTime {
+            return nil
+        }
+        
+        return nextTime
+    }
     
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
@@ -70,7 +90,7 @@ class NotificationManager {
         
         print("✅ Creating notification content")
         return (
-            title: "Step Progress Update",
+            title: "Time to step it up!",
             body: """
                 Current: \(currentSteps) steps (\(percentComplete)%)
                 Needed: \(stepsNeeded) more steps
@@ -132,6 +152,9 @@ class NotificationManager {
         if !isTest {
             lastNotificationTime = Date()
             print("⏱️ Updated last notification time to: \(lastNotificationTime)")
+            
+            // Schedule next background refresh after sending notification
+            scheduleBackgroundRefresh(force: true)
         }
     }
     
@@ -288,46 +311,50 @@ class NotificationManager {
     func scheduleBackgroundRefresh(force: Bool = false) {
         print("🔄 Attempting to schedule background refresh (force: \(force))...")
         
-        // Only check app state if not forced
-        if !force {
-            guard UIApplication.shared.applicationState != .active else {
-                print("📱 App is active - skipping background refresh schedule")
-                return
-            }
-        }
-        
-        let settings = TrackingSettings.load()
-        
-        print("""
-            📋 Background Refresh Context:
-            - Current time: \(Date())
-            - Within tracking period: \(settings.isWithinTrackingPeriod())
-            - Start time: \(settings.startTime)
-            - End time: \(settings.endTime)
-            - App state: \(UIApplication.shared.applicationState.rawValue)
-            - Force schedule: \(force)
-            """)
-        
-        guard settings.isWithinTrackingPeriod() else {
-            print("⏰ Outside tracking window - skipping background refresh schedule")
-            return
-        }
-        
-        // Clear any existing background tasks first
-        BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            requests.forEach { request in
-                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
-                print("🗑️ Cancelled existing task: \(request.identifier)")
+        // Dispatch UI-related checks to main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Only check app state if not forced
+            if !force {
+                guard UIApplication.shared.applicationState != .active else {
+                    print("📱 App is active - skipping background refresh schedule")
+                    return
+                }
             }
             
-            // Schedule new task after cancelling existing ones
-            self.submitBackgroundTask(settings: settings)
+            let settings = TrackingSettings.load()
+            
+            print("""
+                📋 Background Refresh Context:
+                - Current time: \(Date())
+                - Within tracking period: \(settings.isWithinTrackingPeriod())
+                - Start time: \(settings.startTime)
+                - End time: \(settings.endTime)
+                - App state: \(UIApplication.shared.applicationState.rawValue)
+                - Force schedule: \(force)
+                """)
+            
+            guard settings.isWithinTrackingPeriod() else {
+                print("⏰ Outside tracking window - skipping background refresh schedule")
+                return
+            }
+            
+            // Clear any existing background tasks first
+            BGTaskScheduler.shared.getPendingTaskRequests { requests in
+                requests.forEach { request in
+                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                    print("🗑️ Cancelled existing task: \(request.identifier)")
+                }
+                
+                // Schedule new task after cancelling existing ones
+                self.submitBackgroundTask(settings: settings)
+            }
         }
     }
     
     private func submitBackgroundTask(settings: TrackingSettings) {
         let minimumInterval = settings.notificationFrequency * 60
-        let nextCheckDate = Date(timeIntervalSinceNow: minimumInterval)
         
         // Submit multiple requests with staggered times
         let intervals = [

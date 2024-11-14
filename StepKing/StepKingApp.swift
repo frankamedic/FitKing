@@ -24,7 +24,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Request notification authorization
         NotificationManager.shared.requestAuthorization()
         
-        // Start HealthKit observer instead of background tasks
+        // Register background tasks
+        NotificationManager.shared.registerBackgroundTasks()
+        
+        // Start HealthKit observer
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
                 HealthKitManager.shared.startStepObserver()

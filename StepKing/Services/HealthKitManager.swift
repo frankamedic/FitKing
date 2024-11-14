@@ -97,29 +97,34 @@ class HealthKitManager {
             }
             
             self.getTodaySteps { steps, error in
-                // Save to shared UserDefaults for widget
-                if let sharedDefaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
-                    sharedDefaults.set(steps, forKey: "currentSteps")
-                    
-                    // Only try to update widget if WidgetKit is available
-                    #if canImport(WidgetKit)
-                    if #available(iOS 14.0, *) {
-                        WidgetCenter.shared.reloadAllTimelines()
+                // Dispatch UI updates to main thread
+                DispatchQueue.main.async {
+                    // Save to shared UserDefaults for widget
+                    if let sharedDefaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
+                        sharedDefaults.set(steps, forKey: "currentSteps")
+                        
+                        // Only try to update widget if WidgetKit is available
+                        #if canImport(WidgetKit)
+                        if #available(iOS 14.0, *) {
+                            WidgetCenter.shared.reloadAllTimelines()
+                        }
+                        #endif
                     }
-                    #endif
+                    
+                    // Check if notification needed
+                    let settings = TrackingSettings.load()
+                    if settings.isWithinTrackingPeriod() {
+                        NotificationManager.shared.scheduleStepProgressNotification(
+                            currentSteps: steps,
+                            goalSteps: settings.dailyStepGoal,
+                            endTime: settings.todayEndTime,
+                            date: Date()
+                        )
+                    }
                 }
                 
-                // Check if notification needed
-                let settings = TrackingSettings.load()
-                NotificationManager.shared.scheduleStepProgressNotification(
-                    currentSteps: steps,
-                    goalSteps: settings.dailyStepGoal,
-                    endTime: settings.todayEndTime,
-                    date: Date()
-                )
+                completion()
             }
-            
-            completion()
         }
         
         observerQuery = query
@@ -127,10 +132,12 @@ class HealthKitManager {
         
         // Enable background delivery
         healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
-            if let error = error {
-                print("Failed to enable background delivery: \(error)")
-            } else {
-                print("Successfully enabled background delivery for steps")
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Failed to enable background delivery: \(error)")
+                } else {
+                    print("Successfully enabled background delivery for steps")
+                }
             }
         }
     }

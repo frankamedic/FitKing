@@ -32,11 +32,14 @@ struct SettingsView: View {
                         get: { viewModel.settings.dailyStepGoal },
                         set: { viewModel.settings.dailyStepGoal = $0 }
                     ),
-                    step: 1000
+                    step: 100
                 )
             }
             
-            Section(header: Text("Notifications")) {
+            Section(
+                header: Text("Notifications"),
+                footer: Text("Check times are approximate and rely on iOS. Notifications can be triggered by changes in your step count or iOS-managed timed background checks of your step progress. They will never occur more frequently than you specify above, and notifications will only be sent during your tracking period.")
+            ) {
                 Picker(
                     "Check Frequency",
                     selection: Binding(
@@ -51,6 +54,8 @@ struct SettingsView: View {
                     Text("1 hour").tag(TimeInterval(60))
                     Text("2 hours").tag(TimeInterval(120))
                 }
+                
+                NextNotificationView()
             }
         }
     }
