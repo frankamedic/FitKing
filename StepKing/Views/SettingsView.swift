@@ -52,35 +52,6 @@ struct SettingsView: View {
                     Text("2 hours").tag(TimeInterval(120))
                 }
             }
-            
-            Section("Notifications") {
-                Button("Send Test Notification") {
-                    sendTestNotification()
-                }
-            }
-            
-            Button(action: {
-                #if DEBUG
-                NotificationManager.shared.simulateBackgroundRefresh()
-                #endif
-            }) {
-                Text("Test Background Refresh")
-            }
-            .padding()
         }
     }
-    
-    private func sendTestNotification() {
-        print("🔔 Sending test notification...")
-        let now = Date()
-        let testDate = now.addingTimeInterval(5)
-        
-        NotificationManager.shared.scheduleStepProgressNotification(
-            currentSteps: viewModel.currentSteps,
-            goalSteps: viewModel.settings.dailyStepGoal,
-            endTime: viewModel.settings.todayEndTime,
-            date: testDate,
-            isTest: true
-        )
-    }
-} 
+}
