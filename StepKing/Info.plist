@@ -7,7 +7,6 @@
 		<string>fetch</string>
 		<string>processing</string>
 		<string>remote-notification</string>
-		<string>health-kit</string>
 	</array>
 	
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
