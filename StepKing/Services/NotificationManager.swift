@@ -160,10 +160,8 @@ class NotificationManager {
             self.lastNotificationTime = Date()
             print("⏱️ Updated last notification time to: \(self.lastNotificationTime)")
             
-            if source == .backgroundRefresh {
-                // Schedule next background refresh using the 30-minute minimum
-                self.rescheduleBackgroundRefresh()
-            }
+            // Always reschedule background task after sending a notification, regardless of source
+            self.rescheduleBackgroundRefresh()
         }
     }
     
