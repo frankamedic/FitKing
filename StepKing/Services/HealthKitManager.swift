@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import WidgetKit
+import UIKit
 
 class HealthKitManager {
     static let shared = HealthKitManager()
@@ -84,59 +85,70 @@ class HealthKitManager {
             return 
         }
         
-        // Stop any existing query
+        print("🏃‍♂️ Starting step observer...")
+        
+        // Stop any existing query first to prevent duplicates
         stopStepObserver()
         
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completion, error in
             guard let self = self else { return }
             
             if let error = error {
-                print("Observer query error: \(error)")
+                print("❌ Observer query error: \(error)")
                 completion()
                 return
             }
             
+            print("👀 Step change detected - checking progress...")
+            
+            // When steps change, immediately check if notification needed
             self.getTodaySteps { steps, error in
-                // Dispatch UI updates to main thread
                 DispatchQueue.main.async {
-                    // Save to shared UserDefaults for widget
-                    if let sharedDefaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
-                        sharedDefaults.set(steps, forKey: "currentSteps")
-                        
-                        // Only try to update widget if WidgetKit is available
-                        #if canImport(WidgetKit)
-                        if #available(iOS 14.0, *) {
-                            WidgetCenter.shared.reloadAllTimelines()
-                        }
-                        #endif
-                    }
-                    
-                    // Check if notification needed
                     let settings = TrackingSettings.load()
+                    
+                    print("""
+                        📊 Step Observer Update:
+                        - Current steps: \(steps)
+                        - Goal: \(settings.dailyStepGoal)
+                        - Within tracking period: \(settings.isWithinTrackingPeriod())
+                        - Last notification: \(NotificationManager.shared.lastNotificationTime)
+                        - App state: \(UIApplication.shared.applicationState.rawValue)
+                        """)
+                    
                     if settings.isWithinTrackingPeriod() {
-                        NotificationManager.shared.scheduleStepProgressNotification(
-                            currentSteps: steps,
-                            goalSteps: settings.dailyStepGoal,
-                            endTime: settings.todayEndTime,
-                            date: Date()
-                        )
+                        // Important: Check if enough time has passed since last notification
+                        let lastTime = NotificationManager.shared.lastNotificationTime
+                        let minInterval = settings.notificationFrequency * 60
+                        let timeSinceLastNotification = Date().timeIntervalSince(lastTime)
+                        
+                        if timeSinceLastNotification >= minInterval {
+                            // Force notification check from observable query
+                            NotificationManager.shared.scheduleStepProgressNotification(
+                                currentSteps: steps,
+                                goalSteps: settings.dailyStepGoal,
+                                endTime: settings.todayEndTime,
+                                date: Date(),
+                                source: .healthKitObserver
+                            )
+                        } else {
+                            print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(Int(minInterval))s)")
+                        }
                     }
+                    completion()
                 }
-                
-                completion()
             }
         }
         
         observerQuery = query
         healthStore.execute(query)
         
-        // Enable background delivery
+        // Enable background delivery with immediate frequency
         healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
             DispatchQueue.main.async {
-                if let error = error {
-                    print("Failed to enable background delivery: \(error)")
-                } else {
-                    print("Successfully enabled background delivery for steps")
+                if success {
+                    print("✅ Successfully enabled background delivery for steps")
+                } else if let error = error {
+                    print("❌ Failed to enable background delivery: \(error)")
                 }
             }
         }

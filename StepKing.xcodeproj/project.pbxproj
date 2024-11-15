@@ -7,11 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		367E48742CE531EB00D237F4 /* widgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 367E485E2CE531EA00D237F4 /* widgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		36C8B9B72CE538C3001FD2C6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48622CE531EA00D237F4 /* SwiftUI.framework */; };
-		36C8B9B82CE538C3001FD2C6 /* SwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48622CE531EA00D237F4 /* SwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		36C8B9BA2CE538C5001FD2C6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48602CE531EA00D237F4 /* WidgetKit.framework */; };
-		36C8B9BB2CE538C5001FD2C6 /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 367E48602CE531EA00D237F4 /* WidgetKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		36C8B9BF2CE5474E001FD2C6 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -30,40 +27,7 @@
 			remoteGlobalIDString = 367E48052CE5143E00D237F4;
 			remoteInfo = StepKing;
 		};
-		367E48722CE531EB00D237F4 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 367E47FE2CE5143E00D237F4 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 367E485D2CE531EA00D237F4;
-			remoteInfo = widgetExtension;
-		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		367E48792CE531EB00D237F4 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				367E48742CE531EB00D237F4 /* widgetExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		36C8B9B92CE538C4001FD2C6 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				36C8B9B82CE538C3001FD2C6 /* SwiftUI.framework in Embed Frameworks */,
-				36C8B9BB2CE538C5001FD2C6 /* WidgetKit.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		367E48062CE5143E00D237F4 /* StepKing.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StepKing.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -200,12 +164,10 @@
 				367E48022CE5143E00D237F4 /* Sources */,
 				367E48032CE5143E00D237F4 /* Frameworks */,
 				367E48042CE5143E00D237F4 /* Resources */,
-				367E48792CE531EB00D237F4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				367E48732CE531EB00D237F4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				367E48082CE5143E00D237F4 /* StepKing */,
@@ -270,7 +232,6 @@
 				367E485A2CE531EA00D237F4 /* Sources */,
 				367E485B2CE531EA00D237F4 /* Frameworks */,
 				367E485C2CE531EA00D237F4 /* Resources */,
-				36C8B9B92CE538C4001FD2C6 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -407,11 +368,6 @@
 			isa = PBXTargetDependency;
 			target = 367E48052CE5143E00D237F4 /* StepKing */;
 			targetProxy = 367E48212CE5144000D237F4 /* PBXContainerItemProxy */;
-		};
-		367E48732CE531EB00D237F4 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 367E485D2CE531EA00D237F4 /* widgetExtension */;
-			targetProxy = 367E48722CE531EB00D237F4 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

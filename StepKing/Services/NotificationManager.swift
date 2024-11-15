@@ -99,39 +99,35 @@ class NotificationManager {
         )
     }
     
+    enum NotificationSource {
+        case healthKitObserver
+        case backgroundRefresh
+    }
+    
     func scheduleStepProgressNotification(
         currentSteps: Int,
         goalSteps: Int,
         endTime: Date,
         date: Date,
-        isTest: Bool = false
+        source: NotificationSource = .backgroundRefresh
     ) {
         print("""
             🎯 Attempting to schedule step progress notification:
+            - Source: \(source)
             - Current steps: \(currentSteps)
             - Goal steps: \(goalSteps)
             - End time: \(endTime)
             - Schedule date: \(date)
-            - Is test: \(isTest)
             """)
         
-        if !isTest {
+        // Skip frequency check for HealthKit observer notifications
+        if source == .backgroundRefresh {
             let settings = TrackingSettings.load()
             let minimumInterval = settings.notificationFrequency * 60
             let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
-            let nextAllowedNotification = lastNotificationTime.addingTimeInterval(minimumInterval)
-            
-            print("""
-                ⏰ Notification Timing Check:
-                - Current time: \(Date())
-                - Last notification: \(lastNotificationTime)
-                - Time since last: \(Int(timeSinceLastNotification)) seconds
-                - Minimum interval: \(Int(minimumInterval)) seconds
-                - Next allowed at: \(nextAllowedNotification)
-                """)
             
             guard timeSinceLastNotification >= minimumInterval else {
-                print("⚠️ Too soon for notification - waiting \(Int(minimumInterval - timeSinceLastNotification)) more seconds")
+                print("⏳ Too soon for background refresh notification - waiting \(Int(minimumInterval - timeSinceLastNotification)) more seconds")
                 return
             }
         }
@@ -149,7 +145,7 @@ class NotificationManager {
         print("📬 Proceeding to schedule notification with content")
         scheduleNotification(title: title, body: body, date: date)
         
-        if !isTest {
+        if source == .backgroundRefresh {
             lastNotificationTime = Date()
             print("⏱️ Updated last notification time to: \(lastNotificationTime)")
             
@@ -356,46 +352,54 @@ class NotificationManager {
     private func submitBackgroundTask(settings: TrackingSettings) {
         let minimumInterval = settings.notificationFrequency * 60
         
-        // Submit multiple requests with staggered times
-        let intervals = [
-            minimumInterval,
-            minimumInterval + 300,  // +5 minutes
-            minimumInterval + 600   // +10 minutes
-        ]
+        // Calculate all check times for the tracking period
+        let calendar = Calendar.current
+        var checkTimes: [Date] = []
+        var currentTime = Date()
+        let endTime = settings.todayEndTime
         
-        for interval in intervals {
-            let checkDate = Date(timeIntervalSinceNow: interval)
-            let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
-            request.earliestBeginDate = checkDate
-            
-            print("""
-                📅 Submitting refresh request:
-                - Identifier: \(request.identifier)
-                - Current time: \(Date())
-                - Next check: \(checkDate)
-                - Interval: \(interval) seconds
-                """)
-            
-            do {
-                try BGTaskScheduler.shared.submit(request)
-                print("✅ Background refresh scheduled for: \(checkDate)")
-            } catch {
-                print("""
-                    ❌ Failed to schedule refresh:
-                    - Error: \(error.localizedDescription)
-                    - Error code: \(error._code)
-                    - Error domain: \(error._domain)
-                    """)
+        while currentTime < endTime {
+            if settings.isWithinTrackingPeriod(currentTime) {
+                checkTimes.append(currentTime)
             }
+            currentTime = calendar.date(byAdding: .second, value: Int(minimumInterval), to: currentTime) ?? endTime
         }
         
-        // Verify scheduled tasks
+        // Clean up existing tasks first
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            print("""
-                📋 Pending Background Tasks:
-                Total count: \(requests.count)
-                \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
-                """)
+            requests.forEach { request in
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                print("🗑️ Cancelled existing task: \(request.identifier)")
+            }
+            
+            // Schedule new tasks for each check time
+            for checkTime in checkTimes {
+                let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
+                request.earliestBeginDate = checkTime
+                
+                print("""
+                    📅 Submitting refresh request:
+                    - Identifier: \(request.identifier)
+                    - Schedule time: \(checkTime)
+                    """)
+                
+                do {
+                    try BGTaskScheduler.shared.submit(request)
+                    print("✅ Background refresh scheduled for: \(checkTime)")
+                } catch {
+                    print("❌ Failed to schedule refresh: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    // Add this method to clean up tasks when needed
+    func cleanupBackgroundTasks() {
+        BGTaskScheduler.shared.getPendingTaskRequests { requests in
+            requests.forEach { request in
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                print("🗑️ Cleaned up task: \(request.identifier)")
+            }
         }
     }
     
