@@ -80,28 +80,25 @@ class HealthKitManager {
     }
     
     func startStepObserver() {
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { 
-            print("Failed to create step count type")
-            return 
-        }
-        
         print("🏃‍♂️ Starting step observer...")
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
         
-        // Stop any existing query first to prevent duplicates
-        stopStepObserver()
-        
+        // Create observer query
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completion, error in
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Observer query error: \(error)")
+                print("❌ Observer query error: \(error.localizedDescription)")
                 completion()
                 return
             }
             
-            print("👀 Step change detected - checking progress...")
+            // Request background time
+            let backgroundTask = UIApplication.shared.beginBackgroundTask {
+                completion()
+            }
             
-            // When steps change, immediately check if notification needed
+            // Handle step update
             self.getTodaySteps { steps, error in
                 DispatchQueue.main.async {
                     let settings = TrackingSettings.load()
@@ -111,53 +108,61 @@ class HealthKitManager {
                         - Current steps: \(steps)
                         - Goal: \(settings.dailyStepGoal)
                         - Within tracking period: \(settings.isWithinTrackingPeriod())
-                        - Last notification: \(NotificationManager.shared.lastNotificationTime)
-                        - App state: \(UIApplication.shared.applicationState.rawValue)
                         """)
                     
                     if settings.isWithinTrackingPeriod() {
-                        // Important: Check if enough time has passed since last notification
-                        let lastTime = NotificationManager.shared.lastNotificationTime
-                        let minInterval = settings.notificationFrequency * 60
-                        let timeSinceLastNotification = Date().timeIntervalSince(lastTime)
-                        
-                        if timeSinceLastNotification >= minInterval {
-                            // Force notification check from observable query
-                            NotificationManager.shared.scheduleStepProgressNotification(
-                                currentSteps: steps,
-                                goalSteps: settings.dailyStepGoal,
-                                endTime: settings.todayEndTime,
-                                date: Date(),
-                                source: .healthKitObserver
-                            )
-                        } else {
-                            print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(Int(minInterval))s)")
-                        }
+                        NotificationManager.shared.scheduleStepProgressNotification(
+                            currentSteps: steps,
+                            goalSteps: settings.dailyStepGoal,
+                            endTime: settings.todayEndTime,
+                            date: Date(),
+                            source: .healthKitObserver
+                        )
+                    }
+                    
+                    // End background task
+                    if backgroundTask != .invalid {
+                        UIApplication.shared.endBackgroundTask(backgroundTask)
                     }
                     completion()
                 }
             }
         }
         
-        observerQuery = query
+        // Execute query and enable background delivery
         healthStore.execute(query)
+        observerQuery = query
         
-        // Enable background delivery with immediate frequency
-        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
-            DispatchQueue.main.async {
-                if success {
-                    print("✅ Successfully enabled background delivery for steps")
-                } else if let error = error {
-                    print("❌ Failed to enable background delivery: \(error)")
-                }
-            }
-        }
+        // Enable background delivery
+        setupBackgroundDelivery()
     }
     
     func stopStepObserver() {
         if let query = observerQuery {
             healthStore.stop(query)
             observerQuery = nil
+        }
+    }
+    
+    func setupBackgroundDelivery() {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+        
+        // Request background updates with immediate frequency
+        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
+            if let error = error {
+                print("❌ Failed to enable background delivery: \(error.localizedDescription)")
+                return
+            }
+            print("✅ Successfully enabled background delivery for steps")
+            
+            // Force an initial background delivery
+            self.getTodaySteps { steps, error in
+                if let error = error {
+                    print("❌ Initial steps check failed: \(error.localizedDescription)")
+                    return
+                }
+                print("✅ Initial background delivery completed with \(steps) steps")
+            }
         }
     }
 } 

@@ -4,9 +4,11 @@ import UIKit
 
 class NotificationManager {
     static let shared = NotificationManager()
+    static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
     public private(set) var lastNotificationTime: Date = Date.distantPast
     
-    static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
+    // Minimum interval iOS allows for background refresh
+    private let minimumBackgroundInterval: TimeInterval = 30 * 60 // 30 minutes
     
     var nextNotificationTime: Date? {
         let settings = TrackingSettings.load()
@@ -120,37 +122,56 @@ class NotificationManager {
             - Schedule date: \(date)
             """)
         
-        // Skip frequency check for HealthKit observer notifications
-        if source == .backgroundRefresh {
-            let settings = TrackingSettings.load()
-            let minimumInterval = settings.notificationFrequency * 60
-            let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
+        // Move all the notification logic to main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             
-            guard timeSinceLastNotification >= minimumInterval else {
-                print("⏳ Too soon for background refresh notification - waiting \(Int(minimumInterval - timeSinceLastNotification)) more seconds")
+            let settings = TrackingSettings.load()
+            // Always use user's frequency for notification timing
+            let notificationInterval = settings.notificationFrequency * 60
+            let timeSinceLastNotification = Date().timeIntervalSince(self.lastNotificationTime)
+            
+            print("""
+                ⏱ Notification timing check:
+                - Time since last: \(Int(timeSinceLastNotification))s
+                - Notification interval: \(notificationInterval)s
+                - Source: \(source)
+                """)
+            
+            guard timeSinceLastNotification >= notificationInterval else {
+                print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(notificationInterval)s)")
                 return
             }
-        }
-        
-        print("🔍 Checking if notification content should be created...")
-        guard let (title, body) = createStepProgressNotification(
-            currentSteps: currentSteps,
-            goalSteps: goalSteps,
-            endTime: endTime
-        ) else {
-            print("❌ No notification content created - conditions not met")
-            return
-        }
-        
-        print("📬 Proceeding to schedule notification with content")
-        scheduleNotification(title: title, body: body, date: date)
-        
-        if source == .backgroundRefresh {
-            lastNotificationTime = Date()
-            print("⏱️ Updated last notification time to: \(lastNotificationTime)")
             
-            // Schedule next background refresh after sending notification
-            scheduleBackgroundRefresh(force: true)
+            print("🔍 Checking if notification content should be created...")
+            guard let (title, body) = self.createStepProgressNotification(
+                currentSteps: currentSteps,
+                goalSteps: goalSteps,
+                endTime: endTime
+            ) else {
+                print("❌ No notification content created - conditions not met")
+                return
+            }
+            
+            print("📬 Proceeding to schedule notification with content")
+            self.scheduleNotification(title: title, body: body, date: date)
+            
+            // After successful notification, update timestamp and schedule next check
+            self.lastNotificationTime = Date()
+            print("⏱️ Updated last notification time to: \(self.lastNotificationTime)")
+            
+            if source == .backgroundRefresh {
+                // Schedule next background refresh using the 30-minute minimum
+                self.rescheduleBackgroundRefresh()
+            }
+        }
+    }
+    
+    private func rescheduleBackgroundRefresh() {
+        // First cancel any existing background tasks
+        cleanupBackgroundTasks {
+            // Then schedule new one
+            self.scheduleBackgroundRefresh()
         }
     }
     
@@ -304,102 +325,33 @@ class NotificationManager {
         }
     }
     
-    func scheduleBackgroundRefresh(force: Bool = false) {
-        print("🔄 Attempting to schedule background refresh (force: \(force))...")
+    func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
+        // Always use 30 minute interval for background tasks
+        request.earliestBeginDate = Date(timeIntervalSinceNow: minimumBackgroundInterval)
         
-        // Dispatch UI-related checks to main thread
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Only check app state if not forced
-            if !force {
-                guard UIApplication.shared.applicationState != .active else {
-                    print("📱 App is active - skipping background refresh schedule")
-                    return
-                }
-            }
-            
-            let settings = TrackingSettings.load()
-            
-            print("""
-                📋 Background Refresh Context:
-                - Current time: \(Date())
-                - Within tracking period: \(settings.isWithinTrackingPeriod())
-                - Start time: \(settings.startTime)
-                - End time: \(settings.endTime)
-                - App state: \(UIApplication.shared.applicationState.rawValue)
-                - Force schedule: \(force)
-                """)
-            
-            guard settings.isWithinTrackingPeriod() else {
-                print("⏰ Outside tracking window - skipping background refresh schedule")
-                return
-            }
-            
-            // Clear any existing background tasks first
-            BGTaskScheduler.shared.getPendingTaskRequests { requests in
-                requests.forEach { request in
-                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
-                    print("🗑️ Cancelled existing task: \(request.identifier)")
-                }
-                
-                // Schedule new task after cancelling existing ones
-                self.submitBackgroundTask(settings: settings)
-            }
-        }
-    }
-    
-    private func submitBackgroundTask(settings: TrackingSettings) {
-        let minimumInterval = settings.notificationFrequency * 60
+        print("""
+            📅 Scheduling background refresh:
+            - Time: \(request.earliestBeginDate?.description ?? "unknown")
+            - Interval: \(minimumBackgroundInterval/60) minutes
+            """)
         
-        // Calculate all check times for the tracking period
-        let calendar = Calendar.current
-        var checkTimes: [Date] = []
-        var currentTime = Date()
-        let endTime = settings.todayEndTime
-        
-        while currentTime < endTime {
-            if settings.isWithinTrackingPeriod(currentTime) {
-                checkTimes.append(currentTime)
-            }
-            currentTime = calendar.date(byAdding: .second, value: Int(minimumInterval), to: currentTime) ?? endTime
-        }
-        
-        // Clean up existing tasks first
-        BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            requests.forEach { request in
-                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
-                print("🗑️ Cancelled existing task: \(request.identifier)")
-            }
-            
-            // Schedule new tasks for each check time
-            for checkTime in checkTimes {
-                let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
-                request.earliestBeginDate = checkTime
-                
-                print("""
-                    📅 Submitting refresh request:
-                    - Identifier: \(request.identifier)
-                    - Schedule time: \(checkTime)
-                    """)
-                
-                do {
-                    try BGTaskScheduler.shared.submit(request)
-                    print("✅ Background refresh scheduled for: \(checkTime)")
-                } catch {
-                    print("❌ Failed to schedule refresh: \(error.localizedDescription)")
-                }
-            }
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            print("✅ Background refresh scheduled")
+        } catch {
+            print("❌ Could not schedule background refresh: \(error.localizedDescription)")
         }
     }
     
     // Add this method to clean up tasks when needed
-    func cleanupBackgroundTasks() {
+    func cleanupBackgroundTasks(completion: (() -> Void)? = nil) {
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
             requests.forEach { request in
                 BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
-                print("🗑️ Cleaned up task: \(request.identifier)")
+                print("🗑️ Cancelled background task: \(request.identifier)")
             }
+            completion?()
         }
     }
     
@@ -413,29 +365,88 @@ class NotificationManager {
     }
     
     // Add this method to handle app state changes
-    func handleAppStateChange(to state: UIApplication.State) {
+    func handleAppStateChange(_ state: UIApplication.State) {
         print("""
             📱 App State Changed:
             - New state: \(state.rawValue)
             - Current time: \(Date())
+            - Last notification: \(lastNotificationTime)
             """)
-        
-        debugBackgroundStatus()
         
         switch state {
         case .background:
-            print("📲 App entered background - scheduling refresh task")
-            scheduleBackgroundRefresh(force: true)
-        case .active:
-            print("📲 App became active - cancelling background tasks")
+            print("📲 App entered background")
+            // Check if we need to send a notification immediately
+            checkForMissedNotification()
+            
+            // Log background task status before scheduling
             BGTaskScheduler.shared.getPendingTaskRequests { requests in
-                requests.forEach { request in
-                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
-                    print("🗑️ Cancelled background task: \(request.identifier)")
+                print("""
+                    📋 Background Tasks Before Scheduling:
+                    Total count: \(requests.count)
+                    \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
+                    """)
+                
+                // Schedule new background task
+                self.scheduleBackgroundRefresh()
+                
+                // Log after scheduling
+                BGTaskScheduler.shared.getPendingTaskRequests { requests in
+                    print("""
+                        📋 Background Tasks After Scheduling:
+                        Total count: \(requests.count)
+                        \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
+                        """)
                 }
             }
+            
+        case .active:
+            print("📲 App became active")
+            // Log tasks before cleanup
+            BGTaskScheduler.shared.getPendingTaskRequests { requests in
+                print("""
+                    📋 Background Tasks Before Cleanup:
+                    Total count: \(requests.count)
+                    \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
+                    """)
+                
+                self.cleanupBackgroundTasks()
+            }
+            
         default:
             break
+        }
+    }
+    
+    // New method to check if we need to send a notification when app goes to background
+    private func checkForMissedNotification() {
+        let settings = TrackingSettings.load()
+        guard settings.isWithinTrackingPeriod() else {
+            print("⏰ Outside tracking period - skipping missed notification check")
+            return
+        }
+        
+        let timeSinceLastNotification = Date().timeIntervalSince(lastNotificationTime)
+        let minimumInterval = settings.notificationFrequency * 60
+        
+        if timeSinceLastNotification >= minimumInterval {
+            print("📲 Checking for notification after app became inactive...")
+            HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("❌ HealthKit error during inactive check: \(error.localizedDescription)")
+                    return
+                }
+                
+                self.scheduleStepProgressNotification(
+                    currentSteps: steps,
+                    goalSteps: settings.dailyStepGoal,
+                    endTime: settings.todayEndTime,
+                    date: Date(),
+                    source: .backgroundRefresh
+                )
+            }
         }
     }
     
