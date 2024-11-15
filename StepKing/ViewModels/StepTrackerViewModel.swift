@@ -15,14 +15,10 @@ class StepKingViewModel: ObservableObject {
     }
     @Published var currentSteps: Int = 0 {
         didSet {
-            Task {
-                await MainActor.run {
-                    self.sharedDefaults?.setValue(self.currentSteps, forKey: "currentSteps")
-                    self.sharedDefaults?.synchronize()
-                    print("Saved steps to shared defaults: \(self.currentSteps)")
-                    WidgetCenter.shared.reloadAllTimelines()
-                }
-            }
+            self.sharedDefaults?.setValue(self.currentSteps, forKey: "currentSteps")
+            self.sharedDefaults?.synchronize()
+            print("Saved steps to shared defaults: \(self.currentSteps)")
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
     @Published var isTracking: Bool = false
@@ -39,10 +35,12 @@ class StepKingViewModel: ObservableObject {
     }
     
     func startTracking() {
-        print("Starting step tracking")
-        isTracking = true
-        updateSteps() // Initial update
-        startLiveUpdates()
+        DispatchQueue.main.async {
+            print("Starting step tracking")
+            self.isTracking = true
+            self.updateSteps() // Initial update
+            self.startLiveUpdates()
+        }
     }
     
     func stopTracking() {
@@ -73,7 +71,6 @@ class StepKingViewModel: ObservableObject {
     
     private func checkProgress() {
         let now = Date()
-        // Only check progress if enough time has passed
         guard now.timeIntervalSince(lastProgressCheck) >= (settings.notificationFrequency * 30) else {
             print("Skipping progress check - too soon since last check")
             return
@@ -82,14 +79,17 @@ class StepKingViewModel: ObservableObject {
         print("Checking step progress...")
         HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
             guard let self = self else { return }
-            if let error = error {
-                print("Error getting steps: \(error)")
-                return
-            }
             
-            self.currentSteps = steps
-            self.analyzeProgress(steps: steps)
-            self.lastProgressCheck = now
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error getting steps: \(error)")
+                    return
+                }
+                
+                self.currentSteps = steps
+                self.analyzeProgress(steps: steps)
+                self.lastProgressCheck = now
+            }
         }
     }
     
@@ -135,7 +135,6 @@ class StepKingViewModel: ObservableObject {
         if stepsPerHour > 100 {
             let timeFormatter = DateFormatter()
             timeFormatter.timeStyle = .short
-            let formattedEndTime = timeFormatter.string(from: endDateTime)
             
             NotificationManager.shared.scheduleStepProgressNotification(
                 currentSteps: currentSteps,
@@ -157,12 +156,13 @@ class StepKingViewModel: ObservableObject {
     private func updateSteps() {
         HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
             guard let self = self else { return }
-            if let error = error {
-                print("Error getting steps: \(error)")
-                return
-            }
             
             DispatchQueue.main.async {
+                if let error = error {
+                    print("Error getting steps: \(error)")
+                    return
+                }
+                
                 self.currentSteps = steps
                 self.checkNotificationNeeded(steps: steps)
             }

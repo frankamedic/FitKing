@@ -41,8 +41,8 @@ struct ContentView: View {
                 .padding(.bottom, 100)
             }
         }
-        .onChange(of: scenePhase) { newPhase in
-            print("Scene phase changed to: \(newPhase)")
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            print("Scene phase changed from: \(oldPhase) to: \(newPhase)")
             switch newPhase {
             case .active:
                 print("App became active")
