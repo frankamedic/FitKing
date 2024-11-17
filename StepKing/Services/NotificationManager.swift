@@ -2,14 +2,29 @@ import UserNotifications
 import BackgroundTasks
 import UIKit
 
+// NotificationManager is responsible for:
+// 1. Scheduling and managing local notifications about step progress
+// 2. Handling background refresh tasks to check step counts
+// 3. Managing notification timing and frequency
+// 4. Coordinating with HealthKit for step data
 class NotificationManager {
+    // Singleton instance for global access throughout the app
     static let shared = NotificationManager()
+    
+    // Unique identifier for background refresh tasks, matching Info.plist configuration
     static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
+    
+    // Tracks the timestamp of the most recent notification to prevent notification spam
     public private(set) var lastNotificationTime: Date = Date.distantPast
     
-    // Minimum interval iOS allows for background refresh
-    private let minimumBackgroundInterval: TimeInterval = 30 * 60 // 30 minutes
+    // iOS enforces a minimum interval between background refreshes
+    private let minimumBackgroundInterval: TimeInterval = 15 * 60 // 15 minutes
     
+    // Calculates when the next notification should be shown based on:
+    // - Current tracking period (start/end times)
+    // - User's notification frequency settings
+    // - Last notification time
+    // Returns nil if no notification should be scheduled
     var nextNotificationTime: Date? {
         let settings = TrackingSettings.load()
         
@@ -30,6 +45,9 @@ class NotificationManager {
         return nextTime
     }
     
+    // Requests authorization for local notifications from the user
+    // Configures notification types: alerts, badges, and sounds
+    // Logs the authorization status and checks pending notifications
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
@@ -43,6 +61,12 @@ class NotificationManager {
         }
     }
     
+    // Creates notification content based on current step progress
+    // Parameters:
+    // - currentSteps: User's current step count
+    // - goalSteps: User's daily step goal
+    // - endTime: When the tracking period ends today
+    // Returns: Tuple of notification title and body, or nil if notification not needed
     func createStepProgressNotification(currentSteps: Int, goalSteps: Int, endTime: Date) -> (title: String, body: String)? {
         print("📝 Creating step progress notification...")
         let stepsNeeded = goalSteps - currentSteps
@@ -89,23 +113,46 @@ class NotificationManager {
         
         // Add more context to the notification
         let percentComplete = Int((Double(currentSteps) / Double(goalSteps)) * 100)
+        let expectedPercent = Int((Double(expectedSteps) / Double(goalSteps)) * 100)
+        let percentBehind = max(1, expectedPercent - percentComplete)
+        
+        let numberFormatter = NumberFormatter()
+        numberFormatter.numberStyle = .decimal
+        
+        let formattedCurrentSteps = numberFormatter.string(from: NSNumber(value: currentSteps)) ?? "\(currentSteps)"
+        let formattedGoalSteps = numberFormatter.string(from: NSNumber(value: goalSteps)) ?? "\(goalSteps)"
+        let formattedPaceSteps = numberFormatter.string(from: NSNumber(value: stepsPerHour)) ?? "\(stepsPerHour)"
         
         print("✅ Creating notification content")
         return (
-            title: "Time to step it up!",
+            title: "You're \(percentBehind)% behind - Let's catch up! 💪",
             body: """
-                Current: \(currentSteps) steps (\(percentComplete)%)
-                Needed: \(stepsNeeded) more steps
-                Pace: \(stepsPerHour) steps/hour to reach \(goalSteps) by \(formattedEndTime)
+                At \(percentComplete)% (\(formattedCurrentSteps) of \(formattedGoalSteps) steps)
+                Need \(formattedPaceSteps) steps/hr to reach goal by \(formattedEndTime)
                 """
         )
     }
     
+    // Defines the source of notification triggers
+    // - healthKitObserver: Triggered by HealthKit step count changes
+    // - backgroundRefresh: Triggered by system background refresh
     enum NotificationSource {
         case healthKitObserver
         case backgroundRefresh
     }
     
+    // Serial queue ensures notifications are processed one at a time
+    // Prevents race conditions in notification scheduling
+    private let notificationQueue = DispatchQueue(label: "com.sloaninnovation.StepKing.notificationQueue")
+    
+    // Flag to prevent multiple simultaneous notification scheduling attempts
+    private var isSchedulingNotification = false
+    
+    // Schedules a step progress notification if conditions are met:
+    // - Enough time has passed since last notification
+    // - User is behind their expected pace
+    // - Within tracking period
+    // - Valid step counts and goals
     func scheduleStepProgressNotification(
         currentSteps: Int,
         goalSteps: Int,
@@ -113,37 +160,38 @@ class NotificationManager {
         date: Date,
         source: NotificationSource = .backgroundRefresh
     ) {
-        print("""
-            🎯 Attempting to schedule step progress notification:
-            - Source: \(source)
-            - Current steps: \(currentSteps)
-            - Goal steps: \(goalSteps)
-            - End time: \(endTime)
-            - Schedule date: \(date)
-            """)
-        
-        // Move all the notification logic to main thread
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+        // Ensure we only schedule one at a time
+        notificationQueue.async { [weak self] in
+            guard let self = self,
+                  !self.isSchedulingNotification else {
+                print("⏳ Already scheduling a notification, skipping...")
+                return
+            }
+            
+            self.isSchedulingNotification = true
+            defer { self.isSchedulingNotification = false }
+            
+            // Validation checks
+            guard currentSteps >= 0, 
+                  goalSteps > 0, 
+                  date.timeIntervalSinceNow > -1 else {
+                print("❌ Invalid parameters for notification scheduling:")
+                print("- Current steps: \(currentSteps)")
+                print("- Goal steps: \(goalSteps)") 
+                print("- Schedule date: \(date)")
+                return
+            }
             
             let settings = TrackingSettings.load()
-            // Always use user's frequency for notification timing
             let notificationInterval = settings.notificationFrequency * 60
             let timeSinceLastNotification = Date().timeIntervalSince(self.lastNotificationTime)
-            
-            print("""
-                ⏱ Notification timing check:
-                - Time since last: \(Int(timeSinceLastNotification))s
-                - Notification interval: \(notificationInterval)s
-                - Source: \(source)
-                """)
             
             guard timeSinceLastNotification >= notificationInterval else {
                 print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(notificationInterval)s)")
                 return
             }
             
-            print("🔍 Checking if notification content should be created...")
+            // Create notification content synchronously
             guard let (title, body) = self.createStepProgressNotification(
                 currentSteps: currentSteps,
                 goalSteps: goalSteps,
@@ -153,18 +201,16 @@ class NotificationManager {
                 return
             }
             
-            print("📬 Proceeding to schedule notification with content")
-            self.scheduleNotification(title: title, body: body, date: date)
-            
-            // After successful notification, update timestamp and schedule next check
-            self.lastNotificationTime = Date()
-            print("⏱️ Updated last notification time to: \(self.lastNotificationTime)")
-            
-            // Always reschedule background task after sending a notification, regardless of source
-            self.rescheduleBackgroundRefresh()
+            // Schedule on main queue but maintain our lock
+            DispatchQueue.main.sync {
+                self.scheduleNotification(title: title, body: body, date: date)
+                self.rescheduleBackgroundRefresh()
+            }
         }
     }
     
+    // Cancels existing background tasks and schedules a new one
+    // Called after scheduling notifications to ensure background checks continue
     private func rescheduleBackgroundRefresh() {
         // First cancel any existing background tasks
         cleanupBackgroundTasks {
@@ -173,54 +219,86 @@ class NotificationManager {
         }
     }
     
+    // Creates and schedules a local notification with the provided content
+    // Handles:
+    // - Foreground state checking
+    // - Content validation
+    // - Removal of existing notifications
+    // - Notification scheduling
+    // - Error handling and logging
     func scheduleNotification(title: String, body: String, date: Date) {
-        // First check if we have permission
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            print("""
-                🔔 Attempting to schedule notification:
-                - Title: "\(title)"
-                - Body: "\(body)"
-                - Date: \(date)
-                - Auth Status: \(settings.authorizationStatus.rawValue)
-                """)
-            
-            guard settings.authorizationStatus == .authorized else {
-                print("Notifications not authorized")
-                return
+        // Add foreground check
+        guard UIApplication.shared.applicationState != .active else {
+            print("📱 Skipping notification while app is in foreground")
+            return
+        }
+        
+        // Add validation
+        guard !title.isEmpty, !body.isEmpty else {
+            print("❌ Empty notification content")
+            return
+        }
+        
+        let notificationCenter = UNUserNotificationCenter.current()
+        
+        // Remove existing notifications synchronously using a semaphore
+        let semaphore = DispatchSemaphore(value: 0)
+        notificationCenter.removeAllDeliveredNotifications()
+        notificationCenter.removeAllPendingNotificationRequests()
+        
+        // Create and schedule the new notification
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        
+        let timeInterval = max(date.timeIntervalSinceNow, 5.0)
+        print("📅 Scheduling new notification with time interval: \(timeInterval) seconds")
+        
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: timeInterval,
+            repeats: false
+        )
+        
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: trigger
+        )
+        
+        print("📬 Scheduling notification: \(content.title) - \(content.body)")
+        
+        // Schedule synchronously using a semaphore
+        var schedulingError: Error?
+        notificationCenter.add(request) { error in
+            schedulingError = error
+            semaphore.signal()
+        }
+        semaphore.wait()
+        
+        if let error = schedulingError {
+            print("❌ Error scheduling notification: \(error.localizedDescription)")
+            if let error = error as? UNError {
+                print("Notification Error Code: \(error.code.rawValue)")
             }
+        } else {
+            print("✅ Notification scheduled successfully for: \(date)")
+            self.lastNotificationTime = Date()
+            print("⏱️ Updated last notification time to: \(self.lastNotificationTime)")
             
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.sound = .default
-            
-            // Calculate time interval and ensure it's valid
-            let timeInterval = max(date.timeIntervalSinceNow, 1.0)
-            print("Scheduling notification with time interval: \(timeInterval) seconds")
-            
-            let trigger = UNTimeIntervalNotificationTrigger(
-                timeInterval: timeInterval,
-                repeats: false
-            )
-            
-            let request = UNNotificationRequest(
-                identifier: UUID().uuidString,
-                content: content,
-                trigger: trigger
-            )
-            
-            print("Attempting to schedule notification with content: \(content.title) - \(content.body)")
-            
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("❌ Error scheduling notification: \(error.localizedDescription)")
-                } else {
-                    print("✅ Notification scheduled successfully for: \(date)")
+            // Verify notification was scheduled
+            notificationCenter.getPendingNotificationRequests { requests in
+                print("📋 Verified pending notifications: \(requests.count)")
+                requests.forEach { request in
+                    print("- \(request.content.title): scheduled for \(request.trigger?.description ?? "unknown")")
                 }
             }
         }
     }
     
+    // Registers the app for background refresh capability
+    // Sets up the background task handler
+    // Schedules initial background refresh
     func registerBackgroundTasks() {
         print("""
             🔄 Registering background tasks:
@@ -242,6 +320,11 @@ class NotificationManager {
         scheduleBackgroundRefresh()
     }
     
+    // Handles background refresh tasks when triggered by the system
+    // - Updates step counts
+    // - Schedules notifications if needed
+    // - Manages task completion status
+    // - Handles timeouts and errors
     private func handleAppRefresh(task: BGAppRefreshTask) {
         print("""
             🔄 Background Refresh Started:
@@ -323,15 +406,25 @@ class NotificationManager {
         }
     }
     
+    // Schedules the next background refresh task
+    // Uses system-required minimum interval
+    // Handles scheduling errors and logging
     func scheduleBackgroundRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
-        // Always use 30 minute interval for background tasks
-        request.earliestBeginDate = Date(timeIntervalSinceNow: minimumBackgroundInterval)
+        
+        // Get user's notification frequency in seconds
+        let settings = TrackingSettings.load()
+        let userInterval = TimeInterval(settings.notificationFrequency * 60)
+        
+        // Use the larger of minimum system interval or user's preferred interval
+        let refreshInterval = max(minimumBackgroundInterval, userInterval)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: refreshInterval)
         
         print("""
             📅 Scheduling background refresh:
             - Time: \(request.earliestBeginDate?.description ?? "unknown")
-            - Interval: \(minimumBackgroundInterval/60) minutes
+            - User interval: \(userInterval/60) minutes
+            - Background interval: \(refreshInterval/60) minutes
             """)
         
         do {
@@ -342,7 +435,9 @@ class NotificationManager {
         }
     }
     
-    // Add this method to clean up tasks when needed
+    // Cancels all pending background tasks
+    // Used when cleaning up or rescheduling tasks
+    // Optional completion handler for post-cleanup actions
     func cleanupBackgroundTasks(completion: (() -> Void)? = nil) {
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
             requests.forEach { request in
@@ -353,6 +448,8 @@ class NotificationManager {
         }
     }
     
+    // Logs all pending notifications for debugging
+    // Shows notification titles and bodies
     func checkPendingNotifications() {
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             print("""
@@ -362,7 +459,11 @@ class NotificationManager {
         }
     }
     
-    // Add this method to handle app state changes
+    // Manages app state transitions between:
+    // - Active (foreground)
+    // - Background
+    // - Inactive
+    // Handles necessary background task scheduling and cleanup
     func handleAppStateChange(_ state: UIApplication.State) {
         print("""
             📱 App State Changed:
@@ -416,7 +517,8 @@ class NotificationManager {
         }
     }
     
-    // New method to check if we need to send a notification when app goes to background
+    // Checks if a notification should be sent when app enters background
+    // Prevents missing notifications during app state transitions
     private func checkForMissedNotification() {
         let settings = TrackingSettings.load()
         guard settings.isWithinTrackingPeriod() else {
@@ -448,7 +550,8 @@ class NotificationManager {
         }
     }
     
-    // Add this method to NotificationManager class
+    // Logs detailed background task and notification status
+    // Used for debugging background execution issues
     private func debugBackgroundStatus() {
         print("""
             🔍 Background Status Check:
@@ -467,6 +570,8 @@ class NotificationManager {
         }
     }
     
+    // DEBUG-only method to simulate background refresh
+    // Useful for testing notification logic during development
     #if DEBUG
     func simulateBackgroundRefresh() {
         print("🔬 Simulating background refresh...")

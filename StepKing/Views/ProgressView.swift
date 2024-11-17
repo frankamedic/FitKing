@@ -99,6 +99,9 @@ private struct TimeSection: View {
     }
     
     private var formattedTimeRemaining: String {
+        if timeRemaining <= 0 {
+            return "Time's up!"
+        }
         let seconds = Int(timeRemaining)
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
@@ -107,11 +110,26 @@ private struct TimeSection: View {
     }
     
     private var expectedProgress: Double {
-        viewModel.settings.expectedProgress()
+        if timeRemaining <= 0 {
+            return 1.0  // 100% expected when past end time
+        }
+        return viewModel.settings.expectedProgress()
     }
     
     private var isAheadOfSchedule: Bool {
         Double(currentSteps) / Double(goalSteps) >= expectedProgress
+    }
+    
+    private var motivationalMessage: String {
+        if timeRemaining <= 0 {
+            let stepsPercent = Int(Double(currentSteps) / Double(goalSteps) * 100)
+            if stepsPercent >= 100 {
+                return "Great job completing your steps today! 🎉"
+            } else {
+                return "You can still reach your goal before midnight! 💪"
+            }
+        }
+        return ""
     }
     
     var body: some View {
@@ -125,14 +143,22 @@ private struct TimeSection: View {
             .frame(height: 30)
             
             HStack {
-                Text("\(Int(Double(currentSteps) / Double(goalSteps) * 100))% completed")
+                let percentComplete = Int((Double(currentSteps) / Double(goalSteps) * 100))
+                let expectedPercent = Int(expectedProgress * 100)
+                
+                Text("\(percentComplete)% completed")
                     .fontWeight(.bold)
                     .foregroundColor(isAheadOfSchedule ? .green : .orange)
+                if !isAheadOfSchedule {
+                    let percentBehind = max(1, expectedPercent - percentComplete)
+                    Text("(\(percentBehind)% behind)")
+                        .foregroundColor(.secondary)
+                }
                 Text("vs")
                     .foregroundColor(.secondary)
-                Text("\(Int(expectedProgress * 100))% expected")
-                    .fontWeight(isAheadOfSchedule ? .medium : .bold)
-                    .foregroundColor(.green)
+                Text("\(expectedPercent)% expected")
+                    .fontWeight(.bold)
+                    .foregroundColor(.blue)
             }
             .font(.subheadline)
             
@@ -142,10 +168,16 @@ private struct TimeSection: View {
                 Text(formattedTimeRemaining)
                     .font(.system(.title2, design: .monospaced))
                     .fontWeight(.bold)
+                    .foregroundColor(timeRemaining <= 0 ? .red : .primary)
             }
             .padding(.top, 4)
-            .onReceive(timer) { _ in
-                currentTime = Date()
+            
+            if !motivationalMessage.isEmpty {
+                Text(motivationalMessage)
+                    .font(.headline)
+                    .foregroundColor(.blue)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
             }
             
             // ... rest of the existing TimeSection content ...
@@ -180,6 +212,11 @@ struct EnhancedProgressBar: View {
         )
     }
     
+    private var shouldShowEndTime: Bool {
+        let now = Date()
+        return now < endTime || progress >= 1.0
+    }
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
@@ -192,11 +229,13 @@ struct EnhancedProgressBar: View {
                     .foregroundColor(progressBackgroundColor)
                     .frame(width: min(geometry.size.width * progress, geometry.size.width))
                 
-                // Expected progress line
-                Rectangle()
-                    .foregroundColor(.blue)
-                    .frame(width: 2)
-                    .offset(x: geometry.size.width * expectedProgress - 1)
+                // Expected progress line (only show if before end time)
+                if Date() < endTime {
+                    Rectangle()
+                        .foregroundColor(.blue)
+                        .frame(width: 2)
+                        .offset(x: geometry.size.width * expectedProgress - 1)
+                }
                 
                 // Walker icon
                 Image(systemName: "figure.walk")
@@ -209,8 +248,10 @@ struct EnhancedProgressBar: View {
                     Text(formattedTime.start)
                         .font(.caption)
                     Spacer()
-                    Text(formattedTime.end)
-                        .font(.caption)
+                    if shouldShowEndTime {
+                        Text(formattedTime.end)
+                            .font(.caption)
+                    }
                 }
                 .padding(.horizontal, 8)
             )

@@ -5,7 +5,7 @@ struct SettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("Notification Period")) {
+            Section(header: Text("Goal Window")) {
                 DatePicker(
                     "Start Time",
                     selection: Binding(
@@ -25,7 +25,7 @@ struct SettingsView: View {
                 )
             }
             
-            Section(header: Text("Goals")) {
+            Section(header: Text("Goal")) {
                 Stepper(
                     "Daily Step Goal: \(viewModel.settings.dailyStepGoal)",
                     value: Binding(
@@ -38,10 +38,10 @@ struct SettingsView: View {
             
             Section(
                 header: Text("Notifications"),
-                footer: Text("Check times are approximate and rely on iOS. Notifications can be triggered by changes in your step count or iOS-managed timed background checks of your step progress. They will never occur more frequently than you specify above, and notifications will only be sent during your tracking period.")
+                footer: Text("StepKing partners with you by checking your progress in the background. If you're behind on your daily step goal, you'll get nudged during your goal window. You're in control - you won't get nudged more often than you chose, and only when you need that extra help to reach your goal.")
             ) {
                 Picker(
-                    "Check Frequency",
+                    "Nudge Me Every",
                     selection: Binding(
                         get: { viewModel.settings.notificationFrequency },
                         set: { viewModel.settings.notificationFrequency = $0 }
