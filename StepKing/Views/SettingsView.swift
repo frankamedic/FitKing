@@ -13,13 +13,8 @@ struct SettingsView: View {
         if components.hour == 0 && components.minute == 0 {
             print("Midnight detected - adjusting to 23:59")
             
-            // Create 23:59 using today's date
-            var newComponents = calendar.dateComponents([.year, .month, .day], from: Date())
-            newComponents.hour = 23
-            newComponents.minute = 59
-            newComponents.second = 0
-            
-            let adjustedDate = calendar.date(from: newComponents) ?? date
+            // Use the original date as base and just modify the time components
+            let adjustedDate = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: date) ?? date
             
             let formatter = DateFormatter()
             formatter.timeStyle = .short
