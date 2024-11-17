@@ -208,7 +208,17 @@ class HealthKitManager {
             if let error = error {
                 print("📍 Anchored query error: \(error.localizedDescription)")
                 if error.localizedDescription.contains("Protected health data is inaccessible") {
-                    print("📍 Protected data error - will retry on next unlock")
+                    print("📍 Protected data error - using last known steps")
+                    // Use shared defaults when device is locked
+                    if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing"),
+                       let lastKnownSteps = defaults.object(forKey: "lastSteps") as? Int {
+                        print("📍 Last known steps from defaults: \(lastKnownSteps)")
+                        DispatchQueue.main.async {
+                            self.updateSteps(lastKnownSteps)
+                            endBackgroundTask(reason: "used last known steps")
+                        }
+                        return
+                    }
                 }
                 endBackgroundTask(reason: "error occurred")
                 return
