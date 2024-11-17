@@ -64,8 +64,22 @@ private struct ProgressSection: View {
     let currentSteps: Int
     let goalSteps: Int
     
+    private var hasReachedGoal: Bool {
+        currentSteps >= goalSteps
+    }
+    
     var body: some View {
         VStack(spacing: 12) {
+            if hasReachedGoal {
+                CelebrationView()
+                    .frame(height: 200)
+                
+                Text("Goal Reached! 🎉")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.green)
+            }
+            
             Text("Steps Today")
                 .font(.title)
             
@@ -75,7 +89,8 @@ private struct ProgressSection: View {
             Text("Goal: \(goalSteps) steps")
                 .foregroundColor(.secondary)
         }
-        .padding(.bottom, 4)
+        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -86,9 +101,9 @@ private struct TimeSection: View {
     let goalSteps: Int
     @ObservedObject var viewModel: StepKingViewModel
     
-    // Add timer state
+    // Update timer to match tenth of second display
     @State private var currentTime = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 10fps
     
     private var startTime: Date {
         viewModel.settings.todayStartTime
@@ -102,11 +117,13 @@ private struct TimeSection: View {
         if timeRemaining <= 0 {
             return "Time's up!"
         }
-        let seconds = Int(timeRemaining)
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let remainingSeconds = seconds % 60
-        return String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds)
+        let totalTenths = Int(timeRemaining * 10) // Just tenths of seconds
+        let hours = totalTenths / 36_000
+        let minutes = (totalTenths % 36_000) / 600
+        let seconds = (totalTenths % 600) / 10
+        let tenths = totalTenths % 10
+        
+        return String(format: "%02d:%02d:%02d.%01d", hours, minutes, seconds, tenths)
     }
     
     private var expectedProgress: Double {
@@ -130,6 +147,12 @@ private struct TimeSection: View {
             }
         }
         return ""
+    }
+    
+    private var requiredStepsPerHour: Int {
+        guard timeRemaining > 0 else { return 0 }
+        let hoursRemaining = timeRemaining / 3600
+        return Int(Double(stepsNeeded) / hoursRemaining)
     }
     
     var body: some View {
@@ -169,8 +192,19 @@ private struct TimeSection: View {
                     .font(.system(.title2, design: .monospaced))
                     .fontWeight(.bold)
                     .foregroundColor(timeRemaining <= 0 ? .red : .primary)
+                    .animation(.none, value: timeRemaining)
             }
             .padding(.top, 4)
+            
+            if timeRemaining > 0 && stepsNeeded > 0 {
+                HStack {
+                    Text("Required Pace:")
+                        .foregroundColor(.secondary)
+                    Text("\(requiredStepsPerHour) steps/hr")
+                        .font(.system(.title3, design: .monospaced))
+                        .fontWeight(.bold)
+                }
+            }
             
             if !motivationalMessage.isEmpty {
                 Text(motivationalMessage)
@@ -181,6 +215,12 @@ private struct TimeSection: View {
             }
             
             // ... rest of the existing TimeSection content ...
+        }
+        .onReceive(timer) { _ in
+            currentTime = Date()
+        }
+        .onDisappear {
+            timer.upstream.connect().cancel()
         }
     }
 }
@@ -342,5 +382,46 @@ struct ProgressBar: View {
             }
             .cornerRadius(10)
         }
+    }
+}
+
+private struct CelebrationView: View {
+    @State private var isAnimating = false
+    
+    var body: some View {
+        ZStack {
+            // Fireworks
+            ForEach(0..<8) { index in
+                FireworkView(angle: Double(index) * 45)
+                    .opacity(isAnimating ? 0 : 1)
+                    .scaleEffect(isAnimating ? 2 : 0.5)
+            }
+            
+            // Crown
+            Text("👑")
+                .font(.system(size: 100))
+                .scaleEffect(isAnimating ? 1.1 : 1.0)
+        }
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 1.5)
+                .repeatForever(autoreverses: true)
+            ) {
+                isAnimating = true
+            }
+        }
+    }
+}
+
+private struct FireworkView: View {
+    let angle: Double
+    
+    var body: some View {
+        Text("✨")
+            .rotationEffect(.degrees(angle))
+            .offset(
+                x: CGFloat(cos(angle * .pi / 180)) * 50,
+                y: CGFloat(sin(angle * .pi / 180)) * 50
+            )
     }
 } 
