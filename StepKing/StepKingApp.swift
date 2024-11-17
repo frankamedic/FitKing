@@ -47,7 +47,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Start HealthKit observer with proper error handling
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
-                HealthKitManager.shared.startStepObserver()
+                HealthKitManager.shared.startStepObserver {
+                    // Handle completion if needed
+                }
                 
                 // Schedule initial background tasks
                 let settings = TrackingSettings.load()

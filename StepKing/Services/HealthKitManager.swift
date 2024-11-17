@@ -17,9 +17,17 @@ class HealthKitManager {
             return
         }
         
-        healthStore.requestAuthorization(toShare: [], read: [stepType]) { success, error in
-            print("HealthKit authorization response - Success: \(success), Error: \(String(describing: error))")
-            completion(success, error)
+        // Add background delivery authorization
+        let typesToRead: Set<HKSampleType> = [stepType]
+        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
+            if let error = error {
+                print("❌ Failed to enable background delivery during authorization: \(error.localizedDescription)")
+            }
+            
+            self.healthStore.requestAuthorization(toShare: [], read: typesToRead) { success, error in
+                print("HealthKit authorization response - Success: \(success), Error: \(String(describing: error))")
+                completion(success, error)
+            }
         }
     }
     
@@ -79,23 +87,46 @@ class HealthKitManager {
         healthStore.execute(query)
     }
     
-    func startStepObserver() {
+    func startStepObserver(completion: @escaping () -> Void) {
         print("🏃‍♂️ Starting step observer...")
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
         
-        // Create observer query
-        let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completion, error in
-            guard let self = self else { return }
+        // If we already have an observer query, just complete
+        if observerQuery != nil {
+            print("⚠️ Observer query already exists - skipping setup")
+            completion()
+            return
+        }
+        
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            print("Step count type is not available")
+            completion()
+            return
+        }
+        
+        // Create an observer query
+        let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completionHandler, error in
+            func signalCompletion(reason: String) {
+                print("✅ Signaling ready for next update: \(reason)")
+                completionHandler()
+            }
+            
+            guard let self = self else {
+                signalCompletion(reason: "self was nil")
+                return 
+            }
             
             if let error = error {
                 print("❌ Observer query error: \(error.localizedDescription)")
-                completion()
+                signalCompletion(reason: "error occurred")
                 return
             }
             
-            // Request background time
-            let backgroundTask = UIApplication.shared.beginBackgroundTask {
-                completion()
+            var backgroundTaskId = UIBackgroundTaskIdentifier.invalid
+            backgroundTaskId = UIApplication.shared.beginBackgroundTask { 
+                signalCompletion(reason: "background task expiring")
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
             }
             
             // Handle step update
@@ -120,49 +151,69 @@ class HealthKitManager {
                         )
                     }
                     
-                    // End background task
-                    if backgroundTask != .invalid {
-                        UIApplication.shared.endBackgroundTask(backgroundTask)
+                    if backgroundTaskId != .invalid {
+                        UIApplication.shared.endBackgroundTask(backgroundTaskId)
                     }
-                    completion()
+                    signalCompletion(reason: "step update processed")
                 }
             }
         }
         
-        // Execute query and enable background delivery
+        // Execute query and store reference
         healthStore.execute(query)
         observerQuery = query
-        
-        // Enable background delivery
-        setupBackgroundDelivery()
+        completion()
     }
     
     func stopStepObserver() {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+        
         if let query = observerQuery {
             healthStore.stop(query)
             observerQuery = nil
+            
+            // Disable background delivery when stopping observer
+            healthStore.disableBackgroundDelivery(for: stepType) { success, error in
+                if let error = error {
+                    print("❌ Failed to disable background delivery: \(error.localizedDescription)")
+                    return
+                }
+                print("✅ Background delivery disabled")
+            }
         }
     }
     
-    func setupBackgroundDelivery() {
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+    func enableBackgroundDelivery(completion: @escaping () -> Void) {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            completion()
+            return
+        }
         
-        // Request background updates with immediate frequency
         healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
             if let error = error {
                 print("❌ Failed to enable background delivery: \(error.localizedDescription)")
+                completion()
                 return
             }
-            print("✅ Successfully enabled background delivery for steps")
-            
-            // Force an initial background delivery
-            self.getTodaySteps { steps, error in
-                if let error = error {
-                    print("❌ Initial steps check failed: \(error.localizedDescription)")
-                    return
-                }
-                print("✅ Initial background delivery completed with \(steps) steps")
+            print("✅ Background delivery enabled for background mode")
+            completion()
+        }
+    }
+    
+    func disableBackgroundDelivery(completion: @escaping () -> Void) {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            completion()
+            return
+        }
+        
+        healthStore.disableBackgroundDelivery(for: stepType) { success, error in
+            if let error = error {
+                print("❌ Failed to disable background delivery: \(error.localizedDescription)")
+                completion()
+                return
             }
+            print("✅ Background delivery disabled for active mode")
+            completion()
         }
     }
 } 

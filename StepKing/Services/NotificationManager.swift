@@ -18,7 +18,7 @@ class NotificationManager {
     public private(set) var lastNotificationTime: Date = Date.distantPast
     
     // iOS enforces a minimum interval between background refreshes
-    private let minimumBackgroundInterval: TimeInterval = 15 * 60 // 15 minutes
+    private let minimumBackgroundInterval: TimeInterval = 30 * 60 // 30 minutes
     
     // Calculates when the next notification should be shown based on:
     // - Current tracking period (start/end times)
@@ -368,41 +368,50 @@ class NotificationManager {
             return
         }
         
-        print("🏃‍♂️ Requesting current step count...")
-        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
-            // Cancel the timeout since we got a response
-            timeoutWorkItem.cancel()
-            
-            guard let self = self else {
-                print("❌ Self was deallocated")
+        // Request HealthKit authorization before accessing data
+        HealthKitManager.shared.requestAuthorization { success, error in
+            if success {
+                print("🏃‍♂️ Requesting current step count...")
+                HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+                    // Cancel the timeout since we got a response
+                    timeoutWorkItem.cancel()
+                    
+                    guard let self = self else {
+                        print("❌ Self was deallocated")
+                        task.setTaskCompleted(success: false)
+                        return
+                    }
+                    
+                    if let error = error {
+                        print("❌ HealthKit error: \(error.localizedDescription)")
+                        task.setTaskCompleted(success: false)
+                        return
+                    }
+                    
+                    print("""
+                        📊 Step Progress:
+                        - Current steps: \(steps)
+                        - Goal: \(settings.dailyStepGoal)
+                        - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
+                        - Remaining: \(max(0, settings.dailyStepGoal - steps))
+                        """)
+                    
+                    print("🔔 Attempting to schedule notification...")
+                    self.scheduleStepProgressNotification(
+                        currentSteps: steps,
+                        goalSteps: settings.dailyStepGoal,
+                        endTime: settings.todayEndTime,
+                        date: Date()
+                    )
+                    
+                    print("✅ Background refresh completed")
+                    task.setTaskCompleted(success: true)
+                }
+            } else {
+                print("❌ HealthKit authorization failed in background task: \(String(describing: error))")
+                timeoutWorkItem.cancel()
                 task.setTaskCompleted(success: false)
-                return
             }
-            
-            if let error = error {
-                print("❌ HealthKit error: \(error.localizedDescription)")
-                task.setTaskCompleted(success: false)
-                return
-            }
-            
-            print("""
-                📊 Step Progress:
-                - Current steps: \(steps)
-                - Goal: \(settings.dailyStepGoal)
-                - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
-                - Remaining: \(max(0, settings.dailyStepGoal - steps))
-                """)
-            
-            print("🔔 Attempting to schedule notification...")
-            self.scheduleStepProgressNotification(
-                currentSteps: steps,
-                goalSteps: settings.dailyStepGoal,
-                endTime: settings.todayEndTime,
-                date: Date()
-            )
-            
-            print("✅ Background refresh completed")
-            task.setTaskCompleted(success: true)
         }
     }
     
