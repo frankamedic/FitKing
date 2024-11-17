@@ -2,6 +2,45 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: StepKingViewModel
+    @State private var showToast = false
+    @State private var toastMessage = ""
+    
+    private func adjustEndTimeIfMidnight(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        
+        // If both hour and minute are 0 (midnight), adjust to 23:59
+        if components.hour == 0 && components.minute == 0 {
+            print("Midnight detected - adjusting to 23:59")
+            
+            // Create 23:59 using today's date
+            var newComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+            newComponents.hour = 23
+            newComponents.minute = 59
+            newComponents.second = 0
+            
+            let adjustedDate = calendar.date(from: newComponents) ?? date
+            
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            let formattedTime = formatter.string(from: adjustedDate)
+            
+            DispatchQueue.main.async {
+                toastMessage = "Midnight is tomorrow - using \(formattedTime) instead"
+                withAnimation {
+                    showToast = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation {
+                        showToast = false
+                    }
+                }
+            }
+            return adjustedDate
+        }
+        return date
+    }
     
     var body: some View {
         Form {
@@ -19,7 +58,10 @@ struct SettingsView: View {
                     "End Time",
                     selection: Binding(
                         get: { viewModel.settings.endTime },
-                        set: { viewModel.settings.endTime = $0 }
+                        set: { 
+                            print("End time selected: \($0)") // Debug print
+                            viewModel.settings.endTime = adjustEndTimeIfMidnight($0)
+                        }
                     ),
                     displayedComponents: .hourAndMinute
                 )
@@ -58,5 +100,13 @@ struct SettingsView: View {
                 NextNotificationView()
             }
         }
+        .overlay(
+            Group {
+                if showToast {
+                    ToastView(message: toastMessage)
+                        .transition(.move(edge: .top))
+                }
+            }
+        )
     }
 }
