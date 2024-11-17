@@ -63,6 +63,37 @@ struct TrackingSettings: Codable {
         
         return Double(elapsedMinutes) / Double(totalMinutes)
     }
+    
+    func nextTrackingPeriodStart() -> Date? {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Get today's start time
+        var todayStart = calendar.startOfDay(for: now)
+        let startComponents = calendar.dateComponents([.hour, .minute], from: startTime)
+        
+        guard let startHour = startComponents.hour,
+              let startMinute = startComponents.minute else {
+            return nil
+        }
+        
+        todayStart = calendar.date(bySettingHour: startHour,
+                                 minute: startMinute,
+                                 second: 0,
+                                 of: todayStart) ?? todayStart
+        
+        // If we haven't passed today's start time yet, return it
+        if now < todayStart {
+            return todayStart
+        }
+        
+        // Otherwise, return tomorrow's start time
+        guard let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: todayStart) else {
+            return nil
+        }
+        
+        return tomorrowStart
+    }
 }
 
 // Extension for UserDefaults persistence

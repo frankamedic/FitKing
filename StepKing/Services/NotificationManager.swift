@@ -410,13 +410,29 @@ class NotificationManager {
     // Uses system-required minimum interval
     // Handles scheduling errors and logging
     func scheduleBackgroundRefresh() {
+        let settings = TrackingSettings.load()
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
         
-        // Get user's notification frequency in seconds
-        let settings = TrackingSettings.load()
-        let userInterval = TimeInterval(settings.notificationFrequency * 60)
+        if !settings.isWithinTrackingPeriod() {
+            // Calculate next tracking period start time
+            if let nextStart = settings.nextTrackingPeriodStart() {
+                print("⏰ Outside tracking period - scheduling for next period start at \(nextStart)")
+                request.earliestBeginDate = nextStart
+                
+                do {
+                    try BGTaskScheduler.shared.submit(request)
+                    print("✅ Background refresh scheduled for next tracking period")
+                } catch {
+                    print("❌ Could not schedule background refresh: \(error.localizedDescription)")
+                }
+            } else {
+                print("⚠️ Could not determine next tracking period start time")
+            }
+            return
+        }
         
-        // Use the larger of minimum system interval or user's preferred interval
+        // Normal scheduling within tracking period
+        let userInterval = TimeInterval(settings.notificationFrequency * 60)
         let refreshInterval = max(minimumBackgroundInterval, userInterval)
         request.earliestBeginDate = Date(timeIntervalSinceNow: refreshInterval)
         

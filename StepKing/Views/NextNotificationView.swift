@@ -14,14 +14,23 @@ struct NextNotificationView: View {
     }
     
     private var formattedNextTime: String {
-        guard let nextTime = nextNotificationTime else {
-            return "None scheduled"
+        if let nextTime = nextNotificationTime {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return formatter.string(from: nextTime)
         }
         
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: nextTime)
+        // If no next notification time, check for next tracking period
+        let settings = TrackingSettings.load()
+        if let nextStart = settings.nextTrackingPeriodStart() {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return formatter.string(from: nextStart)
+        }
+        
+        return "None scheduled"
     }
     
     private var formattedTimeUntil: String {
