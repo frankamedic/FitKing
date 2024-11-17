@@ -18,7 +18,7 @@ class NotificationManager {
     public private(set) var lastNotificationTime: Date = Date.distantPast
     
     // iOS enforces a minimum interval between background refreshes
-    private let minimumBackgroundInterval: TimeInterval = 30 * 60 // 30 minutes
+    private let minimumBackgroundInterval: TimeInterval = 15 * 60 // 15 minutes
     
     // Calculates when the next notification should be shown based on:
     // - Current tracking period (start/end times)
@@ -368,7 +368,21 @@ class NotificationManager {
             return
         }
         
-        // Request HealthKit authorization before accessing data
+        // Try to get steps from shared defaults first
+        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing"),
+           let lastKnownSteps = defaults.object(forKey: "lastSteps") as? Int {
+            print("📊 Using last known steps from defaults: \(lastKnownSteps)")
+            self.scheduleStepProgressNotification(
+                currentSteps: lastKnownSteps,
+                goalSteps: settings.dailyStepGoal,
+                endTime: settings.todayEndTime,
+                date: Date()
+            )
+            task.setTaskCompleted(success: true)
+            return
+        }
+        
+        // Only try HealthKit if we couldn't get steps from defaults
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
                 print("🏃‍♂️ Requesting current step count...")

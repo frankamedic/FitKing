@@ -7,6 +7,7 @@ class HealthKitManager {
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
     private var observerQuery: HKObserverQuery?
+    private var anchoredQuery: HKAnchoredObjectQuery?
     
     func requestAuthorization(completion: @escaping (Bool, Error?) -> Void) {
         print("Requesting HealthKit authorization...")
@@ -90,20 +91,26 @@ class HealthKitManager {
     func startStepObserver(completion: @escaping () -> Void) {
         print("🏃‍♂️ Starting step observer...")
         
-        // If we already have an observer query, just complete
-        if observerQuery != nil {
-            print("⚠️ Observer query already exists - skipping setup")
-            completion()
-            return
-        }
-        
         guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
             print("Step count type is not available")
             completion()
             return
         }
         
-        // Create an observer query
+        startRegularObserver(for: stepType)
+        startAnchoredObserver(for: stepType)
+        
+        completion()
+    }
+    
+    private func updateSharedDefaults(steps: Int) {
+        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
+            defaults.set(steps, forKey: "lastSteps")
+            print("Saved steps to shared defaults: \(steps)")
+        }
+    }
+    
+    private func startRegularObserver(for stepType: HKQuantityType) {
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completionHandler, error in
             func signalCompletion(reason: String) {
                 print("✅ Signaling ready for next update: \(reason)")
@@ -129,7 +136,6 @@ class HealthKitManager {
                 }
             }
             
-            // Handle step update
             self.getTodaySteps { steps, error in
                 DispatchQueue.main.async {
                     let settings = TrackingSettings.load()
@@ -151,6 +157,10 @@ class HealthKitManager {
                         )
                     }
                     
+                    // Update shared defaults with latest steps
+                    self.updateSharedDefaults(steps: steps)
+                    self.updateSteps(steps)
+                    
                     if backgroundTaskId != .invalid {
                         UIApplication.shared.endBackgroundTask(backgroundTaskId)
                     }
@@ -159,27 +169,102 @@ class HealthKitManager {
             }
         }
         
-        // Execute query and store reference
         healthStore.execute(query)
         observerQuery = query
-        completion()
+    }
+    
+    private func startAnchoredObserver(for stepType: HKQuantityType) {
+        // Create predicate for today only
+        let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startOfDay,
+            end: now,
+            options: .strictStartDate
+        )
+        
+        let anchoredQuery = HKAnchoredObjectQuery(
+            type: stepType,
+            predicate: predicate,
+            anchor: nil,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] query, _, _, _, error in
+            guard let self = self else { return }
+            
+            var backgroundTaskId = UIBackgroundTaskIdentifier.invalid
+            backgroundTaskId = UIApplication.shared.beginBackgroundTask { 
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+            }
+            
+            func endBackgroundTask(reason: String) {
+                print("📍 Ending anchored query background task: \(reason)")
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+            }
+            
+            if let error = error {
+                print("📍 Anchored query error: \(error.localizedDescription)")
+                if error.localizedDescription.contains("Protected health data is inaccessible") {
+                    print("📍 Protected data error - will retry on next unlock")
+                }
+                endBackgroundTask(reason: "error occurred")
+                return
+            }
+            
+            print("📍 Anchored query received update - querying total steps...")
+            self.getTodaySteps { steps, error in
+                if let error = error {
+                    print("📍 Could not get total steps: \(error.localizedDescription)")
+                    endBackgroundTask(reason: "getTodaySteps error")
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.updateSteps(steps)
+                    endBackgroundTask(reason: "steps updated")
+                }
+            }
+        }
+        
+        anchoredQuery.updateHandler = { query, samples, deletedObjects, newAnchor, error in
+            print("📍 Anchored query update handler called")
+            if let error = error {
+                print("📍 Anchored query update error: \(error.localizedDescription)")
+                return
+            }
+            
+            if let samples = samples {
+                print("📍 Anchored query received \(samples.count) updates in update handler")
+            }
+        }
+        
+        healthStore.execute(anchoredQuery)
+        self.anchoredQuery = anchoredQuery
+        print("📍 Anchored query started")
     }
     
     func stopStepObserver() {
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
-        
         if let query = observerQuery {
             healthStore.stop(query)
             observerQuery = nil
-            
-            // Disable background delivery when stopping observer
-            healthStore.disableBackgroundDelivery(for: stepType) { success, error in
-                if let error = error {
-                    print("❌ Failed to disable background delivery: \(error.localizedDescription)")
-                    return
-                }
-                print("✅ Background delivery disabled")
+        }
+        
+        if let query = anchoredQuery {
+            healthStore.stop(query)
+            anchoredQuery = nil
+            print("📍 Anchored query stopped")
+        }
+        
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+        
+        healthStore.disableBackgroundDelivery(for: stepType) { success, error in
+            if let error = error {
+                print("❌ Failed to disable background delivery: \(error.localizedDescription)")
+                return
             }
+            print("✅ Background delivery disabled")
         }
     }
     
@@ -214,6 +299,17 @@ class HealthKitManager {
             }
             print("✅ Background delivery disabled for active mode")
             completion()
+        }
+    }
+    
+    private func updateSteps(_ steps: Int) {
+        DispatchQueue.main.async {
+            self.updateSharedDefaults(steps: steps)
+            NotificationCenter.default.post(
+                name: .init("StepKingStepsUpdated"),
+                object: nil,
+                userInfo: ["steps": steps]
+            )
         }
     }
 } 

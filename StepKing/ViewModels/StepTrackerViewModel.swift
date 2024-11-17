@@ -15,9 +15,6 @@ class StepKingViewModel: ObservableObject {
     }
     @Published var currentSteps: Int = 0 {
         didSet {
-            self.sharedDefaults?.setValue(self.currentSteps, forKey: "currentSteps")
-            self.sharedDefaults?.synchronize()
-            print("Saved steps to shared defaults: \(self.currentSteps)")
             WidgetCenter.shared.reloadAllTimelines()
         }
     }
@@ -32,14 +29,25 @@ class StepKingViewModel: ObservableObject {
     init() {
         self.settings = TrackingSettings.load()
         self.sharedDefaults = UserDefaults(suiteName: groupID)
+        
+        // Listen for step updates from observers
+        NotificationCenter.default.addObserver(
+            forName: .init("StepKingStepsUpdated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let steps = notification.userInfo?["steps"] as? Int {
+                self?.currentSteps = steps
+            }
+        }
     }
     
     func startTracking() {
         DispatchQueue.main.async {
             print("Starting step tracking")
             self.isTracking = true
-            self.updateSteps() // Initial update
-            self.startLiveUpdates()
+            // self.updateSteps()  // Comment out - observers will handle updates
+            // self.startLiveUpdates()  // Comment out - no need for timer-based updates
         }
     }
     
@@ -77,20 +85,12 @@ class StepKingViewModel: ObservableObject {
         }
         
         print("Checking step progress...")
-        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
-            guard let self = self else { return }
-            
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("Error getting steps: \(error)")
-                    return
-                }
-                
-                self.currentSteps = steps
-                self.analyzeProgress(steps: steps)
-                self.lastProgressCheck = now
-            }
-        }
+        // Comment out direct query - observers will handle updates
+        // HealthKitManager.shared.getTodaySteps { [weak self] steps, error in ... }
+        
+        // Instead, use current steps from observers
+        self.analyzeProgress(steps: self.currentSteps)
+        self.lastProgressCheck = now
     }
     
     private func analyzeProgress(steps: Int) {
