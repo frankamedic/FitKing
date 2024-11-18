@@ -2,29 +2,32 @@ import UserNotifications
 import BackgroundTasks
 import UIKit
 
-// NotificationManager is responsible for:
-// 1. Scheduling and managing local notifications about step progress
-// 2. Handling background refresh tasks to check step counts
-// 3. Managing notification timing and frequency
-// 4. Coordinating with HealthKit for step data
+// NotificationManager handles all notification-related tasks:
+// - Scheduling notifications about step progress
+// - Managing background refresh tasks to check steps
+// - Controlling notification timing and frequency
+// - Working with HealthKit to get step data
 class NotificationManager {
-    // Singleton instance for global access throughout the app
+    // Single shared instance used throughout the app
     static let shared = NotificationManager()
     
-    // Unique identifier for background refresh tasks, matching Info.plist configuration
+    // Matches the background task identifier in Info.plist
+    // Used by iOS to identify our background refresh requests
     static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
     
-    // Tracks the timestamp of the most recent notification to prevent notification spam
+    // Tracks when we last showed a notification
+    // Used to prevent showing notifications too frequently
     public private(set) var lastNotificationTime: Date = Date.distantPast
     
-    // iOS enforces a minimum interval between background refreshes
+    // iOS requires at least 15 minutes between background refreshes
+    // This ensures we don't request refreshes more often than allowed
     private let minimumBackgroundInterval: TimeInterval = 15 * 60 // 15 minutes
     
-    // Calculates when the next notification should be shown based on:
-    // - Current tracking period (start/end times)
-    // - User's notification frequency settings
-    // - Last notification time
-    // Returns nil if no notification should be scheduled
+    // Calculates when we should show the next notification by checking:
+    // - Are we in the user's tracking period? (e.g., 9am-5pm)
+    // - How long since last notification?
+    // - What's the user's preferred notification frequency?
+    // Returns nil if we shouldn't show a notification
     var nextNotificationTime: Date? {
         let settings = TrackingSettings.load()
         
@@ -45,9 +48,9 @@ class NotificationManager {
         return nextTime
     }
     
-    // Requests authorization for local notifications from the user
-    // Configures notification types: alerts, badges, and sounds
-    // Logs the authorization status and checks pending notifications
+    // Asks user for permission to send notifications
+    // Requests authorization for alerts, badges, and sounds
+    // Logs whether permission was granted and checks existing notifications
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
@@ -61,12 +64,12 @@ class NotificationManager {
         }
     }
     
-    // Creates notification content based on current step progress
-    // Parameters:
-    // - currentSteps: User's current step count
-    // - goalSteps: User's daily step goal
-    // - endTime: When the tracking period ends today
-    // Returns: Tuple of notification title and body, or nil if notification not needed
+    // Creates the content for a step progress notification by:
+    // - Calculating how many steps are still needed
+    // - Determining how much time is left today
+    // - Computing the required pace (steps per hour)
+    // - Checking if user is behind expected progress
+    // Returns: Title and body text for notification, or nil if no notification needed
     func createStepProgressNotification(currentSteps: Int, goalSteps: Int, endTime: Date) -> (title: String, body: String)? {
         print("📝 Creating step progress notification...")
         let stepsNeeded = goalSteps - currentSteps
@@ -133,26 +136,34 @@ class NotificationManager {
         )
     }
     
-    // Defines the source of notification triggers
-    // - healthKitObserver: Triggered by HealthKit step count changes
-    // - backgroundRefresh: Triggered by system background refresh
+    // Defines where a notification request came from:
+    // - healthKitObserver: When HealthKit detects new steps
+    // - backgroundRefresh: When iOS wakes up our app periodically
     enum NotificationSource {
         case healthKitObserver
         case backgroundRefresh
     }
     
-    // Serial queue ensures notifications are processed one at a time
-    // Prevents race conditions in notification scheduling
+    // A dedicated queue for processing notifications
+    // Ensures only one notification is being scheduled at a time
+    // Prevents conflicts when multiple parts of the app request notifications
     private let notificationQueue = DispatchQueue(label: "com.sloaninnovation.StepKing.notificationQueue")
     
-    // Flag to prevent multiple simultaneous notification scheduling attempts
+    // Tracks if we're currently in the process of scheduling a notification
+    // Helps prevent duplicate notifications from being scheduled
     private var isSchedulingNotification = false
     
-    // Schedules a step progress notification if conditions are met:
+    // Attempts to schedule a step progress notification if:
     // - Enough time has passed since last notification
     // - User is behind their expected pace
-    // - Within tracking period
-    // - Valid step counts and goals
+    // - App is in background state
+    // - We're within the user's tracking period
+    // Parameters:
+    // - currentSteps: User's current step count
+    // - goalSteps: User's daily step goal
+    // - endTime: When today's tracking period ends
+    // - date: When to show the notification
+    // - source: What triggered this notification request
     func scheduleStepProgressNotification(
         currentSteps: Int,
         goalSteps: Int,
@@ -160,7 +171,7 @@ class NotificationManager {
         date: Date,
         source: NotificationSource = .backgroundRefresh
     ) {
-        // Ensure we only schedule one at a time
+        // Process notification request on dedicated queue
         notificationQueue.async { [weak self] in
             guard let self = self,
                   !self.isSchedulingNotification else {
@@ -171,7 +182,7 @@ class NotificationManager {
             self.isSchedulingNotification = true
             defer { self.isSchedulingNotification = false }
             
-            // Validation checks
+            // Validate input parameters
             guard currentSteps >= 0, 
                   goalSteps > 0, 
                   date.timeIntervalSinceNow > -1 else {
@@ -191,7 +202,7 @@ class NotificationManager {
                 return
             }
             
-            // Create notification content synchronously
+            // Try to create notification content
             guard let (title, body) = self.createStepProgressNotification(
                 currentSteps: currentSteps,
                 goalSteps: goalSteps,
@@ -201,7 +212,7 @@ class NotificationManager {
                 return
             }
             
-            // Schedule on main queue but maintain our lock
+            // Schedule notification and refresh background tasks
             DispatchQueue.main.sync {
                 self.scheduleNotification(title: title, body: body, date: date)
                 self.rescheduleBackgroundRefresh()
@@ -209,12 +220,11 @@ class NotificationManager {
         }
     }
     
-    // Cancels existing background tasks and schedules a new one
-    // Called after scheduling notifications to ensure background checks continue
+    // After scheduling a notification, ensures background refresh tasks are up to date:
+    // 1. Cancels any existing background tasks
+    // 2. Schedules a new background refresh task
     private func rescheduleBackgroundRefresh() {
-        // First cancel any existing background tasks
         cleanupBackgroundTasks {
-            // Then schedule new one
             self.scheduleBackgroundRefresh()
         }
     }
@@ -296,9 +306,11 @@ class NotificationManager {
         }
     }
     
-    // Registers the app for background refresh capability
-    // Sets up the background task handler
-    // Schedules initial background refresh
+    // Registers the app for background refresh capability by:
+    // - Setting up the background task handler
+    // - Configuring refresh intervals
+    // - Scheduling initial background refresh
+    // - Logging registration status
     func registerBackgroundTasks() {
         print("""
             🔄 Registering background tasks:
@@ -316,15 +328,14 @@ class NotificationManager {
         }
         print("✅ Background task registration successful")
         
-        // Schedule initial background refresh
         scheduleBackgroundRefresh()
     }
     
-    // Handles background refresh tasks when triggered by the system
-    // - Updates step counts
+    // Handles background refresh tasks when iOS wakes up our app:
+    // - Updates step counts from HealthKit or shared defaults
     // - Schedules notifications if needed
     // - Manages task completion status
-    // - Handles timeouts and errors
+    // - Sets up timeouts to prevent system termination
     private func handleAppRefresh(task: BGAppRefreshTask) {
         print("""
             🔄 Background Refresh Started:
@@ -334,18 +345,18 @@ class NotificationManager {
             - Time since last: \(Int(Date().timeIntervalSince(lastNotificationTime)) / 60) minutes
             """)
         
-        // Set expiration handler first
+        // Set up task expiration handler
         task.expirationHandler = {
             print("⚠️ Background task expired before completion")
             task.setTaskCompleted(success: false)
         }
         
-        // Create a timeout
+        // Create a timeout to ensure we complete within system limits
         let timeoutWorkItem = DispatchWorkItem {
             print("⚠️ Background task timed out")
             task.setTaskCompleted(success: false)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: timeoutWorkItem) // 25 second timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: timeoutWorkItem)
         
         let settings = TrackingSettings.load()
         print("""
@@ -357,7 +368,7 @@ class NotificationManager {
             - Current time in window: \(settings.isWithinTrackingPeriod())
             """)
         
-        // Schedule next refresh first before any potential failures
+        // Schedule next refresh before any potential failures
         print("📅 Scheduling next background refresh")
         scheduleBackgroundRefresh()
         
@@ -368,7 +379,7 @@ class NotificationManager {
             return
         }
         
-        // Try to get steps from shared defaults first
+        // Try to get steps from shared defaults first (faster than HealthKit)
         if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing"),
            let lastKnownSteps = defaults.object(forKey: "lastSteps") as? Int {
             print("📊 Using last known steps from defaults: \(lastKnownSteps)")
@@ -382,12 +393,11 @@ class NotificationManager {
             return
         }
         
-        // Only try HealthKit if we couldn't get steps from defaults
+        // Fall back to HealthKit if needed
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
                 print("🏃‍♂️ Requesting current step count...")
                 HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
-                    // Cancel the timeout since we got a response
                     timeoutWorkItem.cancel()
                     
                     guard let self = self else {
@@ -429,9 +439,11 @@ class NotificationManager {
         }
     }
     
-    // Schedules the next background refresh task
-    // Uses system-required minimum interval
-    // Handles scheduling errors and logging
+    // Schedules the next background refresh task:
+    // - Uses system-required minimum interval (15 minutes)
+    // - Handles scheduling errors
+    // - Logs scheduling status
+    // - Adjusts timing based on tracking period
     func scheduleBackgroundRefresh() {
         let settings = TrackingSettings.load()
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
@@ -454,7 +466,7 @@ class NotificationManager {
             return
         }
         
-        // Normal scheduling within tracking period
+        // Schedule within tracking period
         let userInterval = TimeInterval(settings.notificationFrequency * 60)
         let refreshInterval = max(minimumBackgroundInterval, userInterval)
         request.earliestBeginDate = Date(timeIntervalSinceNow: refreshInterval)
@@ -475,8 +487,10 @@ class NotificationManager {
     }
     
     // Cancels all pending background tasks
-    // Used when cleaning up or rescheduling tasks
-    // Optional completion handler for post-cleanup actions
+    // Used when:
+    // - Cleaning up resources
+    // - Rescheduling tasks
+    // - App state changes
     func cleanupBackgroundTasks(completion: (() -> Void)? = nil) {
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
             requests.forEach { request in
@@ -488,7 +502,7 @@ class NotificationManager {
     }
     
     // Logs all pending notifications for debugging
-    // Shows notification titles and bodies
+    // Shows notification content and scheduling details
     func checkPendingNotifications() {
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             print("""
@@ -498,11 +512,11 @@ class NotificationManager {
         }
     }
     
-    // Manages app state transitions between:
+    // Handles app state changes between:
     // - Active (foreground)
     // - Background
     // - Inactive
-    // Handles necessary background task scheduling and cleanup
+    // Updates background tasks and notifications accordingly
     func handleAppStateChange(_ state: UIApplication.State) {
         print("""
             📱 App State Changed:
@@ -514,10 +528,8 @@ class NotificationManager {
         switch state {
         case .background:
             print("📲 App entered background")
-            // Check if we need to send a notification immediately
             checkForMissedNotification()
             
-            // Log background task status before scheduling
             BGTaskScheduler.shared.getPendingTaskRequests { requests in
                 print("""
                     📋 Background Tasks Before Scheduling:
@@ -525,10 +537,8 @@ class NotificationManager {
                     \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
                     """)
                 
-                // Schedule new background task
                 self.scheduleBackgroundRefresh()
                 
-                // Log after scheduling
                 BGTaskScheduler.shared.getPendingTaskRequests { requests in
                     print("""
                         📋 Background Tasks After Scheduling:
@@ -540,7 +550,6 @@ class NotificationManager {
             
         case .active:
             print("📲 App became active")
-            // Log tasks before cleanup
             BGTaskScheduler.shared.getPendingTaskRequests { requests in
                 print("""
                     📋 Background Tasks Before Cleanup:
@@ -556,7 +565,7 @@ class NotificationManager {
         }
     }
     
-    // Checks if a notification should be sent when app enters background
+    // Checks if we need to send a notification when app enters background
     // Prevents missing notifications during app state transitions
     private func checkForMissedNotification() {
         let settings = TrackingSettings.load()
@@ -588,80 +597,4 @@ class NotificationManager {
             }
         }
     }
-    
-    // Logs detailed background task and notification status
-    // Used for debugging background execution issues
-    private func debugBackgroundStatus() {
-        print("""
-            🔍 Background Status Check:
-            - Background refresh available: \(UIApplication.shared.backgroundRefreshStatus == .available)
-            - Current app state: \(UIApplication.shared.applicationState.rawValue)
-            - Last notification time: \(lastNotificationTime)
-            - Background modes: \(Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") ?? [])
-            """)
-        
-        BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            print("""
-                📋 Current Background Tasks:
-                Total count: \(requests.count)
-                \(requests.map { "- \($0.identifier) scheduled for \($0.earliestBeginDate ?? Date())" }.joined(separator: "\n"))
-                """)
-        }
-    }
-    
-    // DEBUG-only method to simulate background refresh
-    // Useful for testing notification logic during development
-    #if DEBUG
-    func simulateBackgroundRefresh() {
-        print("🔬 Simulating background refresh...")
-        print("🎯 Background task handler called (simulated)")
-        
-        // Get settings and check if we're in tracking period
-        let settings = TrackingSettings.load()
-        print("""
-            📋 Current Settings:
-            - Notification frequency: \(settings.notificationFrequency) minutes
-            - Daily goal: \(settings.dailyStepGoal) steps
-            - Start time: \(settings.startTime)
-            - End time: \(settings.endTime)
-            - Current time in window: \(settings.isWithinTrackingPeriod())
-            """)
-        
-        guard settings.isWithinTrackingPeriod() else {
-            print("⏰ Outside tracking period - skipping background check")
-            return
-        }
-        
-        print("🏃‍♂️ Requesting current step count...")
-        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
-            guard let self = self else {
-                print("❌ Self was deallocated")
-                return
-            }
-            
-            if let error = error {
-                print("❌ HealthKit error: \(error.localizedDescription)")
-                return
-            }
-            
-            print("""
-                📊 Step Progress:
-                - Current steps: \(steps)
-                - Goal: \(settings.dailyStepGoal)
-                - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
-                - Remaining: \(max(0, settings.dailyStepGoal - steps))
-                """)
-            
-            print("🔔 Attempting to schedule notification...")
-            self.scheduleStepProgressNotification(
-                currentSteps: steps,
-                goalSteps: settings.dailyStepGoal,
-                endTime: settings.todayEndTime,
-                date: Date()
-            )
-            
-            print("✅ Simulated background refresh completed")
-        }
-    }
-    #endif
 } 

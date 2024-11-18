@@ -3,12 +3,30 @@ import HealthKit
 import WidgetKit
 import UIKit
 
+// HealthKitManager handles all HealthKit interactions:
+// - Requesting authorization to read step data
+// - Getting current step counts
+// - Observing step count changes in real-time
+// - Managing background delivery of health data
+// - Updating shared step data for widgets
 class HealthKitManager {
+    // Single shared instance used throughout the app
     static let shared = HealthKitManager()
+    
+    // HealthKit's central data store
+    // Used to query and observe step counts
     private let healthStore = HKHealthStore()
+    
+    // Active queries that watch for step count changes
+    // Kept as properties to prevent deallocation
     private var observerQuery: HKObserverQuery?
     private var anchoredQuery: HKAnchoredObjectQuery?
     
+    // Requests authorization to access step count data
+    // Must be called before accessing any HealthKit data
+    // Enables background delivery for real-time updates
+    // Parameters:
+    // - completion: Called with success/error after user responds
     func requestAuthorization(completion: @escaping (Bool, Error?) -> Void) {
         print("Requesting HealthKit authorization...")
         
@@ -32,6 +50,12 @@ class HealthKitManager {
         }
     }
     
+    // Gets the total step count for today by:
+    // - Creating a query from midnight to now
+    // - Requesting the cumulative sum of steps
+    // - Handling any HealthKit errors
+    // Parameters:
+    // - completion: Called with step count or error
     func getTodaySteps(completion: @escaping (Int, Error?) -> Void) {
         print("Getting today's steps...")
         
@@ -88,6 +112,12 @@ class HealthKitManager {
         healthStore.execute(query)
     }
     
+    // Starts observing step count changes by:
+    // - Setting up a real-time observer query
+    // - Creating an anchored query for historical changes
+    // - Enabling background delivery of updates
+    // Parameters:
+    // - completion: Called when observers are set up
     func startStepObserver(completion: @escaping () -> Void) {
         print("🏃‍♂️ Starting step observer...")
         
@@ -103,6 +133,10 @@ class HealthKitManager {
         completion()
     }
     
+    // Updates the step count in shared UserDefaults
+    // Used by the widget to display current steps
+    // Parameters:
+    // - steps: Current step count to save
     private func updateSharedDefaults(steps: Int) {
         if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
             defaults.set(steps, forKey: "lastSteps")
@@ -110,71 +144,152 @@ class HealthKitManager {
         }
     }
     
+    // Sets up real-time step count observer that:
+    // - Triggers immediately when new steps are recorded
+    // - Manages background task lifecycle
+    // - Updates shared step count
+    // - Schedules notifications if needed
     private func startRegularObserver(for stepType: HKQuantityType) {
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completionHandler, error in
-            func signalCompletion(reason: String) {
-                print("✅ Signaling ready for next update: \(reason)")
-                completionHandler()
-            }
+            var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
             
-            guard let self = self else {
-                signalCompletion(reason: "self was nil")
-                return 
-            }
-            
-            if let error = error {
-                print("❌ Observer query error: \(error.localizedDescription)")
-                signalCompletion(reason: "error occurred")
-                return
-            }
-            
-            var backgroundTaskId = UIBackgroundTaskIdentifier.invalid
+            // Create background task with timeout
             backgroundTaskId = UIApplication.shared.beginBackgroundTask { 
-                signalCompletion(reason: "background task expiring")
+                print("⚠️ Background task expiring")
+                completionHandler()
                 if backgroundTaskId != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskId)
                 }
             }
             
+            // Set a 10-second timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                if backgroundTaskId != .invalid {
+                    print("⏱️ Enforcing 10-second timeout (ending open background tasks)")
+                    completionHandler()
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+            }
+            
+            guard let self = self else {
+                completionHandler()
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+                return
+            }
+            
+            if let error = error {
+                print("❌ Observer query error: \(error.localizedDescription)")
+                completionHandler()
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+                return
+            }
+            
+            // Set up a timeout for getTodaySteps to prevent hanging
+            let workItem = DispatchWorkItem {
+                print("⏱️ getTodaySteps timed out")
+                completionHandler()
+                if backgroundTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
+                }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: workItem)
+            
+            // Query current step count and handle the response
             self.getTodaySteps { steps, error in
+                // Cancel the timeout since we got a response
+                workItem.cancel()
+                
                 DispatchQueue.main.async {
                     let settings = TrackingSettings.load()
+                    let appState = UIApplication.shared.applicationState
                     
-                    print("""
-                        📊 Step Observer Update:
-                        - Current steps: \(steps)
-                        - Goal: \(settings.dailyStepGoal)
-                        - Within tracking period: \(settings.isWithinTrackingPeriod())
-                        """)
-                    
-                    if settings.isWithinTrackingPeriod() {
-                        NotificationManager.shared.scheduleStepProgressNotification(
-                            currentSteps: steps,
-                            goalSteps: settings.dailyStepGoal,
-                            endTime: settings.todayEndTime,
-                            date: Date(),
-                            source: .healthKitObserver
-                        )
+                    // Special handling for when app is transitioning to background
+                    // This prevents missing updates during state changes
+                    if appState == .inactive {
+                        // Wait 0.5 seconds for app to complete transition
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            let finalState = UIApplication.shared.applicationState
+                            // Log detailed state information for debugging
+                            print("""
+                                📊 Step Observer Update (Delayed):
+                                - Current steps: \(steps)
+                                - Goal: \(settings.dailyStepGoal)
+                                - Within tracking period: \(settings.isWithinTrackingPeriod())
+                                - Initial state: \(appState.rawValue)
+                                - Final state: \(finalState.rawValue)
+                                """)
+                            
+                            // Schedule notification only if:
+                            // - Within user's tracking period
+                            // - App has fully transitioned to background
+                            if settings.isWithinTrackingPeriod() && finalState == .background {
+                                NotificationManager.shared.scheduleStepProgressNotification(
+                                    currentSteps: steps,
+                                    goalSteps: settings.dailyStepGoal,
+                                    endTime: settings.todayEndTime,
+                                    date: Date(),
+                                    source: .healthKitObserver
+                                )
+                            }
+                            // Update step count in shared storage and notify observers
+                            self.updateSteps(steps)
+                        }
+                    } else {
+                        // Handle immediate updates when app state isn't changing
+                        // Log current state for debugging
+                        print("""
+                            📊 Step Observer Update:
+                            - Current steps: \(steps)
+                            - Goal: \(settings.dailyStepGoal)
+                            - Within tracking period: \(settings.isWithinTrackingPeriod())
+                            - App state: \(appState.rawValue)
+                            """)
+                        
+                        // Schedule notification only if:
+                        // - Within user's tracking period
+                        // - App is already in background
+                        if settings.isWithinTrackingPeriod() && appState == .background {
+                            NotificationManager.shared.scheduleStepProgressNotification(
+                                currentSteps: steps,
+                                goalSteps: settings.dailyStepGoal,
+                                endTime: settings.todayEndTime,
+                                date: Date(),
+                                source: .healthKitObserver
+                            )
+                        } else {
+                            print("📱 Skipping notification - app not in background")
+                        }
+                        
+                        // Update step count in both shared defaults and through notification
+                        self.updateSharedDefaults(steps: steps)
+                        self.updateSteps(steps)
                     }
                     
-                    // Update shared defaults with latest steps
-                    self.updateSharedDefaults(steps: steps)
-                    self.updateSteps(steps)
-                    
+                    // Clean up background task
+                    completionHandler()
                     if backgroundTaskId != .invalid {
                         UIApplication.shared.endBackgroundTask(backgroundTaskId)
                     }
-                    signalCompletion(reason: "step update processed")
                 }
             }
         }
         
+        // Start the observer query and retain it
         healthStore.execute(query)
         observerQuery = query
     }
     
+    // Sets up an anchored query that:
+    // - Tracks historical step count changes
+    // - Handles device-locked scenarios
+    // - Updates shared step count
+    // - Manages its own background task lifecycle
     private func startAnchoredObserver(for stepType: HKQuantityType) {
-        // Create predicate for today only
         let now = Date()
         let startOfDay = Calendar.current.startOfDay(for: now)
         let predicate = HKQuery.predicateForSamples(
@@ -255,6 +370,10 @@ class HealthKitManager {
         print("📍 Anchored query started")
     }
     
+    // Stops all step count observers:
+    // - Cancels the real-time observer query
+    // - Stops the anchored query
+    // - Disables background delivery
     func stopStepObserver() {
         if let query = observerQuery {
             healthStore.stop(query)
@@ -278,6 +397,8 @@ class HealthKitManager {
         }
     }
     
+    // Enables background delivery of step count updates
+    // Called when app needs real-time step data in background
     func enableBackgroundDelivery(completion: @escaping () -> Void) {
         guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
             completion()
@@ -295,6 +416,8 @@ class HealthKitManager {
         }
     }
     
+    // Disables background delivery of step count updates
+    // Called when app doesn't need real-time updates
     func disableBackgroundDelivery(completion: @escaping () -> Void) {
         guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
             completion()
@@ -312,6 +435,11 @@ class HealthKitManager {
         }
     }
     
+    // Updates step count and notifies observers by:
+    // - Saving to shared UserDefaults for widget
+    // - Posting notification for UI updates
+    // Parameters:
+    // - steps: Current step count to broadcast
     private func updateSteps(_ steps: Int) {
         DispatchQueue.main.async {
             self.updateSharedDefaults(steps: steps)

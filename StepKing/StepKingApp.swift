@@ -41,7 +41,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Request notification authorization
         NotificationManager.shared.requestAuthorization()
         
-        // Register background tasks
+        // Register background tasks (this includes initial scheduling)
         NotificationManager.shared.registerBackgroundTasks()
         
         // Start HealthKit observer with proper error handling
@@ -50,17 +50,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 HealthKitManager.shared.startStepObserver {
                     // Handle completion if needed
                 }
-                
-                // Schedule initial background tasks
-                let settings = TrackingSettings.load()
-                if settings.isWithinTrackingPeriod() {
-                    NotificationManager.shared.scheduleBackgroundRefresh()
-                }
             } else if let error = error {
                 print("HealthKit authorization failed: \(error.localizedDescription)")
             }
         }
         
         return true
+    }
+
+    func applicationWillTerminate(_ application: UIApplication) {
+        print("📱 App terminating - ensuring background refresh is scheduled")
+        
+        // Use dispatch semaphore to ensure scheduling completes
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        BGTaskScheduler.shared.getPendingTaskRequests { requests in
+            if requests.isEmpty {
+                print("📅 No background tasks found - scheduling new refresh")
+                NotificationManager.shared.scheduleBackgroundRefresh()
+            } else {
+                print("✅ Background tasks already scheduled: \(requests.count)")
+            }
+            semaphore.signal()
+        }
+        
+        // Wait for scheduling but with a shorter timeout
+        _ = semaphore.wait(timeout: .now() + 0.25)
     }
 }
