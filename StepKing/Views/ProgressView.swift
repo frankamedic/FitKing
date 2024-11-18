@@ -1,5 +1,12 @@
 import SwiftUI
 
+extension Double {
+    func rounded(to decimals: Int) -> Double {
+        let multiplier = pow(10.0, Double(decimals))
+        return (self * multiplier).rounded() / multiplier
+    }
+}
+
 struct ProgressView: View {
     @ObservedObject var viewModel: StepKingViewModel
     
@@ -166,20 +173,21 @@ private struct TimeSection: View {
             .frame(height: 30)
             
             HStack {
-                let percentComplete = Int((Double(currentSteps) / Double(goalSteps) * 100))
-                let expectedPercent = Int(expectedProgress * 100)
+                let percentComplete = (Double(currentSteps) / Double(goalSteps) * 100).rounded(to: 1)
+                let expectedPercent = (expectedProgress * 100).rounded(to: 1)
                 
-                Text("\(percentComplete)% completed")
+                Text(String(format: "%.1f%% completed", percentComplete))
                     .fontWeight(.bold)
                     .foregroundColor(isAheadOfSchedule ? .green : .orange)
                 if !isAheadOfSchedule {
-                    let percentBehind = max(1, expectedPercent - percentComplete)
-                    Text("(\(percentBehind)% behind)")
+                    let percentDiff = (expectedProgress - Double(currentSteps) / Double(goalSteps)) * 100
+                    let percentBehind = percentDiff.rounded(to: 1)
+                    Text(String(format: "(%.1f%% behind)", percentBehind))
                         .foregroundColor(.secondary)
                 }
                 Text("vs")
                     .foregroundColor(.secondary)
-                Text("\(expectedPercent)% expected")
+                Text(String(format: "%.1f%% expected", expectedPercent))
                     .fontWeight(.bold)
                     .foregroundColor(.blue)
             }

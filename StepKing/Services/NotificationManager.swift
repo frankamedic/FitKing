@@ -102,9 +102,13 @@ class NotificationManager {
             - Current steps: \(currentSteps)
             """)
         
-        // Only create notification if behind expected pace
-        guard currentSteps < expectedSteps else {
-            print("⚠️ No notification needed - ahead of pace")
+        let percentComplete = (Double(currentSteps) / Double(goalSteps) * 100).rounded(to: 1)
+        let expectedPercent = (expectedProgress * 100).rounded(to: 1)
+        let percentBehind = (expectedPercent - percentComplete).rounded(to: 1)
+        
+        // Only create notification if meaningfully behind expected pace (1% or more)
+        guard currentSteps < expectedSteps && percentBehind >= 1.0 else {
+            print("⚠️ No notification needed - ahead of pace or less than 1% behind")
             return nil
         }
         
@@ -115,10 +119,6 @@ class NotificationManager {
         let formattedEndTime = formatter.string(from: endTime)
         
         // Add more context to the notification
-        let percentComplete = Int((Double(currentSteps) / Double(goalSteps)) * 100)
-        let expectedPercent = Int((Double(expectedSteps) / Double(goalSteps)) * 100)
-        let percentBehind = max(1, expectedPercent - percentComplete)
-        
         let numberFormatter = NumberFormatter()
         numberFormatter.numberStyle = .decimal
         
@@ -128,11 +128,11 @@ class NotificationManager {
         
         print("✅ Creating notification content")
         return (
-            title: "You're \(percentBehind)% behind - Let's catch up! 💪",
-            body: """
-                At \(percentComplete)% (\(formattedCurrentSteps) of \(formattedGoalSteps) steps)
-                Need \(formattedPaceSteps) steps/hr to reach goal by \(formattedEndTime)
-                """
+            title: String(format: "You're %.1f%% behind - Let's catch up! 💪", percentBehind),
+            body: String(format: """
+                At %.1f%% (%@ of %@ steps)
+                Need %@ steps/hr to reach goal by %@
+                """, percentComplete, formattedCurrentSteps, formattedGoalSteps, formattedPaceSteps, formattedEndTime)
         )
     }
     
