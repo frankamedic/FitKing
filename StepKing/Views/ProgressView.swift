@@ -81,7 +81,7 @@ private struct ProgressSection: View {
                 CelebrationView()
                     .frame(height: 200)
                 
-                Text("Goal Reached! 🎉")
+                Text("Goal Reached! ")
                     .font(.title)
                     .fontWeight(.bold)
                     .foregroundColor(.green)
@@ -176,7 +176,7 @@ private struct TimeSection: View {
                 let percentComplete = (Double(currentSteps) / Double(goalSteps) * 100).rounded(to: 1)
                 let expectedPercent = (expectedProgress * 100).rounded(to: 1)
                 
-                Text(String(format: "%.1f%% completed", percentComplete))
+                Text(String(format: "%.1f%% done ✅", percentComplete))
                     .fontWeight(.bold)
                     .foregroundColor(isAheadOfSchedule ? .green : .orange)
                 if !isAheadOfSchedule {
@@ -187,7 +187,7 @@ private struct TimeSection: View {
                 }
                 Text("vs")
                     .foregroundColor(.secondary)
-                Text(String(format: "%.1f%% expected", expectedPercent))
+                Text(String(format: "%.1f%% target 🎯", expectedPercent))
                     .fontWeight(.bold)
                     .foregroundColor(.blue)
             }
@@ -310,68 +310,145 @@ struct EnhancedProgressBar: View {
 private struct PaceOptionsSection: View {
     let paceOptions: [PaceOption]
     
+    private var maxTimeNeeded: TimeInterval {
+        paceOptions.map { $0.timeNeeded }.max() ?? 1
+    }
+    
+    private var maxStepsPerHour: Int {
+        paceOptions.map { $0.stepsPerHour }.max() ?? 1
+    }
+    
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Text("Ways to Reach Your Goal")
-                .font(.headline)
+                .font(.title2)
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity)
                 .padding(.bottom, 4)
             
             ForEach(paceOptions, id: \.name) { option in
-                VStack(spacing: 8) {
-                    // Top row with icon and pace
-                    HStack {
-                        Text(option.icon)
-                            .font(.title)
-                            .frame(width: 40, alignment: .center)
-                        
-                        Text("Pace:")
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                            .frame(width: 80, alignment: .trailing)
-                        
-                        Text(option.name)
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    
-                    // Steps per hour row
-                    HStack {
-                        // Empty space for icon alignment
-                        Color.clear
-                            .frame(width: 40)
-                        
-                        Text("Steps/hour:")
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                            .frame(width: 80, alignment: .trailing)
-                        
-                        Text("\(option.stepsPerHour)")
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    
-                    // Total time row
-                    HStack {
-                        // Empty space for icon alignment
-                        Color.clear
-                            .frame(width: 40)
-                        
-                        Text("Total Time:")
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                            .frame(width: 80, alignment: .trailing)
-                        
-                        Text(PaceCalculator.formatTime(option.timeNeeded))
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding()
-                .background(Color(.systemBackground))
-                .cornerRadius(10)
-                .shadow(radius: 2)
+                PaceOptionCard(
+                    option: option,
+                    timeProgress: option.timeNeeded / maxTimeNeeded,
+                    intensityProgress: Double(option.stepsPerHour) / Double(maxStepsPerHour)
+                )
             }
         }
+    }
+}
+
+private struct PaceOptionCard: View {
+    let option: PaceOption
+    let timeProgress: Double
+    let intensityProgress: Double
+    @Environment(\.colorScheme) var colorScheme
+    
+    private var cardBackgroundColor: Color {
+        colorScheme == .dark ? Color(.systemGray6) : .white
+    }
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            // Header with icon and pace name
+            HStack(spacing: 10) {
+                // Icon circle
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.1))
+                        .frame(width: 36, height: 36)
+                    
+                    Text(option.icon)
+                        .font(.system(size: 20))
+                }
+                
+                // Name and steps/hour on same line
+                HStack(spacing: 4) {
+                    Text(option.name)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                    
+                    Text("•")
+                        .foregroundColor(.secondary)
+                        .font(.caption2)
+                    
+                    Text("\(option.stepsPerHour) steps/hr")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // Time pill
+                Text(PaceCalculator.formatTime(option.timeNeeded))
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue.opacity(0.1))
+                    )
+                    .foregroundColor(.blue)
+            }
+            
+            // Progress indicators with labels above
+            VStack(spacing: 1) {
+                // Labels row
+                HStack {
+                    Text("Effort Level")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                    
+                    Spacer()
+                    
+                    Text("Time Required")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                }
+                
+                // Progress bars row
+                HStack(spacing: 8) {
+                    // Intensity bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.red.opacity(0.1))
+                                .frame(height: 2)
+                            
+                            Capsule()
+                                .fill(Color.red)
+                                .frame(width: geometry.size.width * intensityProgress, height: 2)
+                        }
+                    }
+                    
+                    // Time bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.blue.opacity(0.1))
+                                .frame(height: 3)
+                            
+                            Capsule()
+                                .fill(Color.blue)
+                                .frame(width: geometry.size.width * timeProgress, height: 3)
+                        }
+                    }
+                }
+                .frame(height: 12)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(cardBackgroundColor)
+                .shadow(
+                    color: Color.black.opacity(0.05),
+                    radius: 4,
+                    x: 0,
+                    y: 1
+                )
+        )
     }
 }
 

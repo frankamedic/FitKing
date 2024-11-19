@@ -13,9 +13,11 @@ struct PaceOption {
 
 struct PaceCalculator {
     static let paceOptions = [
-        (name: "Slow pace (2 mph)", icon: "🐢", stepsPerHour: 3600),
-        (name: "Moderate pace (3 mph)", icon: "🦊", stepsPerHour: 4800),
-        (name: "Brisk pace (4 mph)", icon: "🐆", stepsPerHour: 8000)
+        (name: "Very slow walk (1 mph)", icon: "🦥", stepsPerHour: 2000),
+        (name: "Slow walk (2.5 mph)", icon: "🐢", stepsPerHour: 5000),
+        (name: "Normal walk (3.5 mph)", icon: "🐨", stepsPerHour: 7000),
+        (name: "Power walk (4.5 mph)", icon: "🦘", stepsPerHour: 9000),
+        (name: "Slow jog (5.5 mph)", icon: "🦊", stepsPerHour: 11000)
     ]
     
     static func calculatePaceOptions(stepsNeeded: Int) -> [PaceOption] {
