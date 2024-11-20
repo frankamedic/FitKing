@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 extension Double {
     func rounded(to decimals: Int) -> Double {
@@ -108,9 +109,10 @@ private struct TimeSection: View {
     let goalSteps: Int
     @ObservedObject var viewModel: StepKingViewModel
     
-    // Update timer to match tenth of second display
+    // Update timer management to use Combine and 10fps
     @State private var currentTime = Date()
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 10fps
+    private let timer = Timer.publish(every: 0.1, on: .main, in: .common)
+    @State private var timerCancellable: AnyCancellable?
     
     private var startTime: Date {
         viewModel.settings.todayStartTime
@@ -222,13 +224,19 @@ private struct TimeSection: View {
                     .padding(.top, 4)
             }
             
-            // ... rest of the existing TimeSection content ...
         }
-        .onReceive(timer) { _ in
-            currentTime = Date()
+        .onAppear {
+            // Start the timer when view appears
+            timerCancellable = timer
+                .autoconnect()
+                .sink { _ in
+                    currentTime = Date()
+                }
         }
         .onDisappear {
-            timer.upstream.connect().cancel()
+            // Clean up timer when view disappears
+            timerCancellable?.cancel()
+            timerCancellable = nil
         }
     }
 }
