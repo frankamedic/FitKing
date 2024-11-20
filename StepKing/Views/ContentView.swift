@@ -41,6 +41,8 @@ struct ContentView: View {
                 .padding(.bottom, 100)
             }
         }
+        // TODO: Add light mode support (and themes) - for now, dark mode only (also in Info.plist)
+        .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { oldPhase, newPhase in
             print("Scene phase changed from: \(oldPhase) to: \(newPhase)")
             switch newPhase {
