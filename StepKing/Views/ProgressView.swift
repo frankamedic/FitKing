@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 
+// Extension to Double for rounding decimal numbers
+// Used throughout the app for percentage calculations
 extension Double {
     func rounded(to decimals: Int) -> Double {
         let multiplier = pow(10.0, Double(decimals))
@@ -8,17 +10,31 @@ extension Double {
     }
 }
 
+// Main progress view that shows:
+// - Current step count and goal
+// - Progress visualization
+// - Time remaining information
+// - Different pace options to reach goal
 struct ProgressView: View {
     @ObservedObject var viewModel: StepKingViewModel
     
+    // Calculates remaining steps needed to reach daily goal
+    // Returns 0 if goal is already met
     private var stepsNeeded: Int {
         max(0, viewModel.settings.dailyStepGoal - viewModel.currentSteps)
     }
     
+    // Gets available pace options based on remaining steps
+    // Uses PaceCalculator to determine different walking speeds
     private var paceOptions: [PaceOption] {
         PaceCalculator.calculatePaceOptions(stepsNeeded: stepsNeeded)
     }
     
+    // Main view layout:
+    // - Shows error view if there's an error
+    // - Displays current progress section
+    // - Shows time info if steps are still needed
+    // - Lists pace options if steps are still needed
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
@@ -52,6 +68,10 @@ struct ProgressView: View {
 }
 
 // Helper Views
+// Displays error messages with:
+// - Warning triangle icon
+// - Error message text
+// - Red color scheme for visibility
 private struct ErrorView: View {
     let message: String
     
@@ -68,10 +88,16 @@ private struct ErrorView: View {
     }
 }
 
+// Shows current progress information:
+// - Celebration view if goal is reached
+// - Current step count
+// - Daily step goal
+// - Visual indicators of completion
 private struct ProgressSection: View {
     let currentSteps: Int
     let goalSteps: Int
     
+    // Determines if user has reached their daily goal
     private var hasReachedGoal: Bool {
         currentSteps >= goalSteps
     }
@@ -102,6 +128,11 @@ private struct ProgressSection: View {
     }
 }
 
+// Displays time-related information:
+// - Time remaining until end of tracking period (HH:MM:SS.T format)
+// - Progress bar with expected vs actual progress 
+// - Required pace to reach goal 
+// - Motivational messages based on progress
 private struct TimeSection: View {
     let endTime: Date
     let stepsNeeded: Int
@@ -109,19 +140,24 @@ private struct TimeSection: View {
     let goalSteps: Int
     @ObservedObject var viewModel: StepKingViewModel
     
-    // Update timer management to use Combine and 10fps
+    // Timer management using Combine
+    // Updates every 0.1 seconds for smooth countdown
     @State private var currentTime = Date()
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common)
     @State private var timerCancellable: AnyCancellable?
     
+    // Gets start time from settings
     private var startTime: Date {
         viewModel.settings.todayStartTime
     }
     
+    // Calculates remaining time until end time
     private var timeRemaining: TimeInterval {
         currentTime.distance(to: endTime)
     }
     
+    // Formats remaining time as HH:MM:SS.T
+    // Shows "Time's up!" when time has expired
     private var formattedTimeRemaining: String {
         if timeRemaining <= 0 {
             return "Time's up!"
@@ -135,6 +171,7 @@ private struct TimeSection: View {
         return String(format: "%02d:%02d:%02d.%01d", hours, minutes, seconds, tenths)
     }
     
+    // Calculates expected progress based on time of day
     private var expectedProgress: Double {
         if timeRemaining <= 0 {
             return 1.0  // 100% expected when past end time
@@ -142,10 +179,13 @@ private struct TimeSection: View {
         return viewModel.settings.expectedProgress()
     }
     
+    // Determines if user is ahead of their expected progress
     private var isAheadOfSchedule: Bool {
         Double(currentSteps) / Double(goalSteps) >= expectedProgress
     }
     
+    // Provides context-appropriate motivational messages
+    // Based on time remaining and progress
     private var motivationalMessage: String {
         if timeRemaining <= 0 {
             let stepsPercent = Int(Double(currentSteps) / Double(goalSteps) * 100)
@@ -158,12 +198,20 @@ private struct TimeSection: View {
         return ""
     }
     
+    // Calculates required steps per hour to reach goal
+    // Based on remaining time and steps needed
     private var requiredStepsPerHour: Int {
         guard timeRemaining > 0 else { return 0 }
         let hoursRemaining = timeRemaining / 3600
         return Int(Double(stepsNeeded) / hoursRemaining)
     }
     
+    // Layout combines:
+    // - Enhanced progress bar
+    // - Progress percentages
+    // - Time remaining display
+    // - Required pace information
+    // - Motivational messages
     var body: some View {
         VStack(spacing: 8) {
             EnhancedProgressBar(
@@ -241,6 +289,11 @@ private struct TimeSection: View {
     }
 }
 
+// Enhanced progress bar that shows:
+// - Current progress
+// - Expected progress marker
+// - Start and end times
+// - Visual indicators of progress status
 struct EnhancedProgressBar: View {
     let progress: Double
     let expectedProgress: Double
@@ -315,6 +368,10 @@ struct EnhancedProgressBar: View {
     }
 }
 
+// Displays different pace options to reach goal:
+// - Lists each pace option with details
+// - Shows relative intensity of each option
+// - Indicates time required for each pace
 private struct PaceOptionsSection: View {
     let paceOptions: [PaceOption]
     
@@ -345,6 +402,11 @@ private struct PaceOptionsSection: View {
     }
 }
 
+// Individual card showing pace option details:
+// - Pace name and icon
+// - Steps per hour required
+// - Time needed to complete
+// - Visual indicators for intensity and time
 private struct PaceOptionCard: View {
     let option: PaceOption
     let timeProgress: Double
@@ -460,6 +522,9 @@ private struct PaceOptionCard: View {
     }
 }
 
+// Basic progress bar component:
+// - Shows simple filled bar
+// - Used as base for EnhancedProgressBar
 struct ProgressBar: View {
     let progress: Double
     
@@ -478,6 +543,10 @@ struct ProgressBar: View {
     }
 }
 
+// Animated celebration view shown when goal is reached:
+// - Displays animated fireworks
+// - Shows floating crown emoji
+// - Creates visual reward for achievement
 private struct CelebrationView: View {
     @State private var isAnimating = false
     
@@ -506,6 +575,9 @@ private struct CelebrationView: View {
     }
 }
 
+// Individual firework component:
+// - Positions sparkle emoji at calculated angle
+// - Part of CelebrationView animation
 private struct FireworkView: View {
     let angle: Double
     
