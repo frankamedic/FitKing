@@ -89,10 +89,9 @@ private struct ErrorView: View {
 }
 
 // Shows current progress information:
-// - Celebration view if goal is reached
+// - Crown emoji and celebration message when goal reached
 // - Current step count
 // - Daily step goal
-// - Visual indicators of completion
 private struct ProgressSection: View {
     let currentSteps: Int
     let goalSteps: Int
@@ -103,12 +102,14 @@ private struct ProgressSection: View {
     }
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
+            Spacer()
+            
             if hasReachedGoal {
-                CelebrationView()
-                    .frame(height: 200)
+                Text("👑")
+                    .font(.system(size: 64))
                 
-                Text("Goal Reached! ")
+                Text("🎉 Goal Reached! 🎉")
                     .font(.title)
                     .fontWeight(.bold)
                     .foregroundColor(.green)
@@ -123,7 +124,6 @@ private struct ProgressSection: View {
             Text("Goal: \(goalSteps) steps")
                 .foregroundColor(.secondary)
         }
-        .frame(maxHeight: .infinity)
         .frame(maxWidth: .infinity)
     }
 }
@@ -232,8 +232,10 @@ private struct TimeSection: View {
                 if !isAheadOfSchedule {
                     let percentDiff = (expectedProgress - Double(currentSteps) / Double(goalSteps)) * 100
                     let percentBehind = percentDiff.rounded(to: 1)
-                    Text(String(format: "(%.1f%% behind)", percentBehind))
-                        .foregroundColor(.secondary)
+                    if percentBehind >= 0.1 {
+                        Text(String(format: "(%.1f%% behind)", percentBehind))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 Text("vs")
                     .foregroundColor(.secondary)
@@ -540,53 +542,5 @@ struct ProgressBar: View {
             }
             .cornerRadius(10)
         }
-    }
-}
-
-// Animated celebration view shown when goal is reached:
-// - Displays animated fireworks
-// - Shows floating crown emoji
-// - Creates visual reward for achievement
-private struct CelebrationView: View {
-    @State private var isAnimating = false
-    
-    var body: some View {
-        ZStack {
-            // Fireworks
-            ForEach(0..<8) { index in
-                FireworkView(angle: Double(index) * 45)
-                    .opacity(isAnimating ? 0 : 1)
-                    .scaleEffect(isAnimating ? 2 : 0.5)
-            }
-            
-            // Crown
-            Text("👑")
-                .font(.system(size: 100))
-                .scaleEffect(isAnimating ? 1.1 : 1.0)
-        }
-        .onAppear {
-            withAnimation(
-                .easeInOut(duration: 1.5)
-                .repeatForever(autoreverses: true)
-            ) {
-                isAnimating = true
-            }
-        }
-    }
-}
-
-// Individual firework component:
-// - Positions sparkle emoji at calculated angle
-// - Part of CelebrationView animation
-private struct FireworkView: View {
-    let angle: Double
-    
-    var body: some View {
-        Text("✨")
-            .rotationEffect(.degrees(angle))
-            .offset(
-                x: CGFloat(cos(angle * .pi / 180)) * 50,
-                y: CGFloat(sin(angle * .pi / 180)) * 50
-            )
     }
 } 
