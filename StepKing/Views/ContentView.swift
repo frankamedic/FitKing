@@ -14,6 +14,11 @@ struct ContentView: View {
                         Label("Progress", systemImage: "figure.walk")
                     }
                 
+                WeeklyStepsView(mainViewModel: viewModel)
+                    .tabItem {
+                        Label("Weekly", systemImage: "calendar")
+                    }
+                
                 SettingsView(viewModel: viewModel)
                     .tabItem {
                         Label("Settings", systemImage: "gear")

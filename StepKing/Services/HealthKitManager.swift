@@ -450,4 +450,112 @@ class HealthKitManager {
             )
         }
     }
+    
+    // Gets weekly step data for the past 12 weeks
+    // Returns an array of WeeklyStepData with daily averages
+    // Parameters:
+    // - goalSteps: Daily step goal to calculate progress against
+    // - completion: Called with array of weekly data or error
+    func getWeeklyStepData(goalSteps: Int, completion: @escaping ([WeeklyStepData], Error?) -> Void) {
+        print("Getting weekly step data for past 12 weeks...")
+        
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            print("Step count type is not available")
+            completion([], nil)
+            return
+        }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Calculate the start of the current week (Sunday)
+        let currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+        
+        // Go back 12 weeks from current week start
+        guard let startDate = calendar.date(byAdding: .weekOfYear, value: -11, to: currentWeekStart) else {
+            completion([], nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startDate,
+            end: now,
+            options: .strictStartDate
+        )
+        
+        let query = HKStatisticsCollectionQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: startDate,
+            intervalComponents: DateComponents(day: 1)
+        )
+        
+        query.initialResultsHandler = { query, results, error in
+            if let error = error {
+                print("HealthKit Weekly Query Error: \(error.localizedDescription)")
+                completion([], error)
+                return
+            }
+            
+            guard let results = results else {
+                print("No weekly results returned from HealthKit")
+                completion([], nil)
+                return
+            }
+            
+            var weeklyData: [WeeklyStepData] = []
+            
+            // Process data week by week
+            for weekOffset in 0..<12 {
+                guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: startDate) else {
+                    continue
+                }
+                
+                guard let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) else {
+                    continue
+                }
+                
+                // Don't go beyond current date
+                let actualWeekEnd = min(weekEnd, now)
+                
+                var totalSteps = 0
+                var daysWithData = 0
+                
+                // Sum up steps for each day in the week
+                results.enumerateStatistics(from: weekStart, to: actualWeekEnd) { statistics, stop in
+                    if let quantity = statistics.sumQuantity() {
+                        let daySteps = Int(quantity.doubleValue(for: HKUnit.count()))
+                        if daySteps > 0 {
+                            totalSteps += daySteps
+                            daysWithData += 1
+                        }
+                    }
+                }
+                
+                // Calculate daily average (only count days with data to avoid dilution)
+                let dailyAverage = daysWithData > 0 ? totalSteps / daysWithData : 0
+                
+                let weekData = WeeklyStepData(
+                    weekStartDate: weekStart,
+                    weekEndDate: actualWeekEnd,
+                    totalSteps: totalSteps,
+                    dailyAverage: dailyAverage,
+                    daysWithData: daysWithData,
+                    goalSteps: goalSteps
+                )
+                
+                weeklyData.append(weekData)
+            }
+            
+            // Sort by week start date (most recent first)
+            weeklyData.sort { $0.weekStartDate > $1.weekStartDate }
+            
+            print("Retrieved \(weeklyData.count) weeks of step data")
+            completion(weeklyData, nil)
+        }
+        
+        print("Executing weekly HealthKit query...")
+        healthStore.execute(query)
+    }
 } 
