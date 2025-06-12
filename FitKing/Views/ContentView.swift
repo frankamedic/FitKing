@@ -13,7 +13,7 @@ struct ContentView: View {
             TabView(selection: $selectedTab) {
                 ProgressView(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
                     .tabItem {
-                        Label("Today", systemImage: "chart.line.uptrend.xyaxis")
+                        Label("Now", systemImage: "chart.line.uptrend.xyaxis")
                     }
                     .tag(0)
                 

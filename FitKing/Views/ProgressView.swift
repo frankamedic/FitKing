@@ -480,104 +480,114 @@ private struct WeightDetailSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Weight header
-            HStack {
-                Image(systemName: "scalemass")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                Text("Weight Progress")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                if isLoading {
-                    SwiftUI.ProgressView()
-                        .scaleEffect(0.8)
-                }
-            }
-            
-            if !isLoading {
-                // Current weight and target
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Current")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(settings.displayWeight(currentWeight))
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Target")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(settings.displayWeight(targetWeight))
-                            .font(.title2)
-                            .fontWeight(.medium)
-                    }
-                }
-                
-                // 4-week average summary
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Last 4 Weeks Summary")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    
+            if isLoading {
+                // Loading state
+                VStack(spacing: 16) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Average Weight")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(settings.displayWeight(overallAverage))
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.green)
-                        }
+                        Image(systemName: "scalemass")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                        
+                        Text("Weight Progress")
+                            .font(.headline)
+                            .fontWeight(.semibold)
                         
                         Spacer()
                         
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("Avg Change/Week")
+                        SwiftUI.ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                    
+                    // Loading placeholder
+                    VStack(spacing: 8) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 40)
+                                .shimmer()
+                        }
+                    }
+                }
+            } else {
+                // Weight header with trend focus
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "scalemass")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                        
+                        Text("Weight Trend")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        Spacer()
+                    }
+                    
+                    // Simplified trend summary - focus on overall direction
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("4-Week Trend")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
                             let changeText = averageWeightLoss > 0 ? 
-                                "-\(settings.displayWeight(averageWeightLoss))" : 
+                                "-\(settings.displayWeight(averageWeightLoss))/week" : 
                                 averageWeightLoss < 0 ? 
-                                "+\(settings.displayWeight(abs(averageWeightLoss)))" : 
-                                "No change"
+                                "+\(settings.displayWeight(abs(averageWeightLoss)))/week" : 
+                                "Steady"
                             
-                            Text(changeText)
-                                .font(.title3)
-                                .fontWeight(.bold)
+                            HStack(spacing: 6) {
+                                // Trend icon
+                                Image(systemName: averageWeightLoss > 0 ? "arrow.down.circle.fill" :
+                                                 averageWeightLoss < 0 ? "arrow.up.circle.fill" :
+                                                 "minus.circle.fill")
+                                    .foregroundColor(averageWeightLoss > 0 ? .green : 
+                                                   averageWeightLoss < 0 ? .red : .blue)
+                                    .font(.title3)
+                                
+                                Text(changeText)
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(averageWeightLoss > 0 ? .green : 
+                                                   averageWeightLoss < 0 ? .red : .blue)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        // Simple status message
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("Status")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            let statusText = averageWeightLoss > 0 ? "Great progress!" :
+                                            averageWeightLoss < 0 ? "Focus on Fundamentals!" :
+                                            "Maintaining"
+                            
+                            Text(statusText)
+                                .font(.caption)
+                                .fontWeight(.semibold)
                                 .foregroundColor(averageWeightLoss > 0 ? .green : 
-                                               averageWeightLoss < 0 ? .red : .orange)
+                                               averageWeightLoss < 0 ? .orange : .blue)
                         }
                     }
                 }
                 
-                // Weekly breakdown
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Weekly Breakdown")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    
-                    ForEach(weeklyWeightData.sorted { $0.weekStartDate > $1.weekStartDate }) { week in
-                        WeeklyWeightRow(weekData: week, settings: settings)
-                    }
-                }
+                // Visual weight progression with bars
+                WeightProgressBars(weeklyData: weeklyWeightData, settings: settings, targetWeight: targetWeight)
             }
         }
         .padding()
-        .background(cardBackgroundColor)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 1)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemGray6).opacity(0.8))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
         .onTapGesture {
             // Set weight metric and switch to Weekly tab
             selectedMetric = .weight
@@ -600,44 +610,171 @@ private struct WeightDetailSection: View {
     }
 }
 
-// Individual weekly weight row
-private struct WeeklyWeightRow: View {
-    let weekData: WeeklyFitnessData
+// Visual weight progression with horizontal bars
+private struct WeightProgressBars: View {
+    let weeklyData: [WeeklyFitnessData]
     let settings: TrackingSettings
+    let targetWeight: Double
     
-    private var changeText: String? {
-        guard let prevWeight = weekData.previousWeekAverage else { return nil }
-        let change = weekData.dailyAverage - prevWeight
-        if abs(change) < 0.1 { return nil } // Don't show very small changes
-        return change > 0 ? "+\(settings.displayWeight(abs(change)))" : "-\(settings.displayWeight(abs(change)))"
+    // Calculate weight range for bar scaling - focus on actual data variation for better visual impact
+    private var weightRange: (min: Double, max: Double) {
+        let actualWeights = weeklyData.map { $0.dailyAverage }
+        guard !actualWeights.isEmpty else { return (min: 0, max: 1) }
+        
+        let minActual = actualWeights.min()!
+        let maxActual = actualWeights.max()!
+        let actualRange = maxActual - minActual
+        
+        // If the actual range is very small (< 5 lbs), create a more meaningful range
+        if actualRange < 5.0 {
+            let center = (minActual + maxActual) / 2
+            let expandedRange: Double = max(5.0, actualRange * 3) // Minimum 5 lbs range or 3x actual
+            return (min: center - expandedRange/2, max: center + expandedRange/2)
+        }
+        
+        // For larger ranges, add some buffer but focus on actual data
+        let buffer = actualRange * 0.15 // 15% buffer for visual spacing
+        return (min: minActual - buffer, max: maxActual + buffer)
     }
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(weekData.weekLabel)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                Text(weekData.dateRange)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(settings.displayWeight(weekData.dailyAverage))
-                    .font(.caption)
-                    .fontWeight(.bold)
-                
-                if let change = changeText {
-                    Text(change)
-                        .font(.caption2)
-                        .foregroundColor(change.hasPrefix("+") ? .red : .green)
-                }
+        VStack(spacing: 12) {
+            ForEach(weeklyData.sorted { $0.weekStartDate > $1.weekStartDate }) { week in
+                WeightBarRow(
+                    weekData: week,
+                    settings: settings,
+                    targetWeight: targetWeight,
+                    weightRange: weightRange
+                )
             }
         }
+    }
+}
+
+
+// Individual weight bar row
+private struct WeightBarRow: View {
+    let weekData: WeeklyFitnessData
+    let settings: TrackingSettings
+    let targetWeight: Double
+    let weightRange: (min: Double, max: Double)
+    
+    private var progressWidth: Double {
+        let range = weightRange.max - weightRange.min
+        guard range > 0 else { return 0.5 }
+        return (weekData.dailyAverage - weightRange.min) / range
+    }
+    
+    private var targetPosition: Double {
+        let range = weightRange.max - weightRange.min
+        guard range > 0 else { return 0.5 }
+        return (targetWeight - weightRange.min) / range
+    }
+    
+    private var changeFromPrevious: Double? {
+        guard let prevWeight = weekData.previousWeekAverage else { return nil }
+        return weekData.dailyAverage - prevWeight
+    }
+    
+    private var barColor: Color {
+        if let change = changeFromPrevious {
+            return change > 0 ? .red : .green // Red for gain, green for loss
+        }
+        // For first week, determine if moving toward target
+        let distanceFromTarget = abs(weekData.dailyAverage - targetWeight)
+        return weekData.dailyAverage > targetWeight ? .green : .blue // Green if above target (losing is good), blue if below target
+    }
+    
+    private var changeText: String? {
+        guard let change = changeFromPrevious, abs(change) >= 0.1 else { return nil }
+        let prefix = change > 0 ? "+" : ""
+        return "\(prefix)\(settings.displayWeight(abs(change)))"
+    }
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            // Week label and weight
+            HStack {
+                Text(weekData.weekLabel)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Text(settings.displayWeight(weekData.dailyAverage))
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(barColor)
+                    
+                    if let change = changeText {
+                        Text("(\(change))")
+                            .font(.caption2)
+                            .foregroundColor(barColor.opacity(0.8))
+                    }
+                }
+            }
+            
+            // Weight progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 8)
+                    
+                    // Weight bar
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(barColor.opacity(0.8))
+                        .frame(
+                            width: geometry.size.width * progressWidth,
+                            height: 8
+                        )
+                        .animation(.easeInOut(duration: 0.6), value: progressWidth)
+                    
+
+                }
+            }
+            .frame(height: 12)
+        }
         .padding(.vertical, 4)
+    }
+}
+
+// Shimmer effect for loading
+private struct ShimmerEffect: ViewModifier {
+    @State private var phase: CGFloat = 0
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.clear,
+                        Color.white.opacity(0.4),
+                        Color.clear
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .rotationEffect(.degrees(30))
+                .offset(x: phase)
+                .animation(
+                    Animation.linear(duration: 1.5)
+                        .repeatForever(autoreverses: false),
+                    value: phase
+                )
+            )
+            .onAppear {
+                phase = 200
+            }
+    }
+}
+
+extension View {
+    func shimmer() -> some View {
+        modifier(ShimmerEffect())
     }
 }
 
