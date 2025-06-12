@@ -4,70 +4,186 @@ import WidgetKit
 import UIKit
 
 // HealthKitManager handles all HealthKit interactions:
-// - Requesting authorization to read step data
-// - Getting current step counts
-// - Observing step count changes in real-time
+// - Requesting authorization to read fitness data
+// - Getting current fitness metrics
+// - Observing fitness data changes in real-time
 // - Managing background delivery of health data
-// - Updating shared step data for widgets
+// - Updating shared fitness data for widgets
 class HealthKitManager {
     // Single shared instance used throughout the app
     static let shared = HealthKitManager()
     
     // HealthKit's central data store
-    // Used to query and observe step counts
+    // Used to query and observe fitness data
     private let healthStore = HKHealthStore()
     
-    // Active queries that watch for step count changes
+    // Active queries that watch for fitness data changes
     // Kept as properties to prevent deallocation
-    private var observerQuery: HKObserverQuery?
-    private var anchoredQuery: HKAnchoredObjectQuery?
+    private var observerQueries: [HKObserverQuery] = []
+    private var anchoredQueries: [HKAnchoredObjectQuery] = []
     
-    // Requests authorization to access step count data
+    // HealthKit quantity types for fitness data
+    private var fitnessTypes: [HKQuantityType] {
+        let types = [
+            HKQuantityType.quantityType(forIdentifier: .bodyMass),
+            HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed),
+            HKQuantityType.quantityType(forIdentifier: .dietaryCarbohydrates),
+            HKQuantityType.quantityType(forIdentifier: .dietaryProtein)
+        ]
+        return types.compactMap { $0 }
+    }
+    
+    // Requests authorization to access fitness data
     // Must be called before accessing any HealthKit data
     // Enables background delivery for real-time updates
     // Parameters:
     // - completion: Called with success/error after user responds
     func requestAuthorization(completion: @escaping (Bool, Error?) -> Void) {
-        print("Requesting HealthKit authorization...")
+        print("Requesting HealthKit authorization for fitness data...")
         
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            print("Step count type is not available")
-            completion(false, nil)
-            return
+        let typesToRead: Set<HKSampleType> = Set(fitnessTypes)
+        
+        // Enable background delivery for all fitness types
+        let group = DispatchGroup()
+        var hasError = false
+        
+        for type in fitnessTypes {
+            group.enter()
+            healthStore.enableBackgroundDelivery(for: type, frequency: .immediate) { success, error in
+                if let error = error {
+                    print("❌ Failed to enable background delivery for \(type): \(error.localizedDescription)")
+                    hasError = true
+                }
+                group.leave()
+            }
         }
         
-        // Add background delivery authorization
-        let typesToRead: Set<HKSampleType> = [stepType]
-        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
-            if let error = error {
-                print("❌ Failed to enable background delivery during authorization: \(error.localizedDescription)")
-            }
-            
+        group.notify(queue: .main) {
             self.healthStore.requestAuthorization(toShare: [], read: typesToRead) { success, error in
                 print("HealthKit authorization response - Success: \(success), Error: \(String(describing: error))")
-                completion(success, error)
+                completion(success && !hasError, error)
             }
         }
     }
     
-    // Gets the total step count for today by:
-    // - Creating a query from midnight to now
-    // - Requesting the cumulative sum of steps
-    // - Handling any HealthKit errors
+    // Gets today's fitness data for all metrics
     // Parameters:
-    // - completion: Called with step count or error
-    func getTodaySteps(completion: @escaping (Int, Error?) -> Void) {
-        print("Getting today's steps...")
+    // - completion: Called with fitness data or error
+    func getTodayFitnessData(completion: @escaping (DailyFitnessData, Error?) -> Void) {
+        print("Getting today's fitness data...")
         
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            print("Step count type is not available")
+        let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
+        var fitnessData = DailyFitnessData(date: now)
+        
+        let group = DispatchGroup()
+        var errors: [Error] = []
+        
+        // Get weight data
+        group.enter()
+        getLatestWeight { weight, error in
+            if let error = error {
+                errors.append(error)
+            } else {
+                fitnessData.weight = weight
+            }
+            group.leave()
+        }
+        
+        // Get calories data
+        group.enter()
+        getTodayCalories { calories, error in
+            if let error = error {
+                errors.append(error)
+            } else {
+                fitnessData.calories = calories
+            }
+            group.leave()
+        }
+        
+        // Get carbs data
+        group.enter()
+        getTodayCarbs { carbs, error in
+            if let error = error {
+                errors.append(error)
+            } else {
+                fitnessData.carbs = carbs
+            }
+            group.leave()
+        }
+        
+        // Get protein data
+        group.enter()
+        getTodayProtein { protein, error in
+            if let error = error {
+                errors.append(error)
+            } else {
+                fitnessData.protein = protein
+            }
+            group.leave()
+        }
+        
+        group.notify(queue: .main) {
+            let combinedError = errors.first
+            completion(fitnessData, combinedError)
+        }
+    }
+    
+    // Gets the latest weight measurement
+    private func getLatestWeight(completion: @escaping (Double, Error?) -> Void) {
+        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
+            completion(0, nil)
+            return
+        }
+        
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+        let query = HKSampleQuery(
+            sampleType: weightType,
+            predicate: nil,
+            limit: 1,
+            sortDescriptors: [sortDescriptor]
+        ) { query, samples, error in
+            if let error = error {
+                completion(0, error)
+                return
+            }
+            
+            guard let sample = samples?.first as? HKQuantitySample else {
+                completion(0, nil)
+                return
+            }
+            
+            let weight = sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            completion(weight, nil)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    // Gets today's total calories consumed
+    private func getTodayCalories(completion: @escaping (Double, Error?) -> Void) {
+        getDailyNutritionTotal(for: .dietaryEnergyConsumed, unit: .kilocalorie(), completion: completion)
+    }
+    
+    // Gets today's total carbs consumed
+    private func getTodayCarbs(completion: @escaping (Double, Error?) -> Void) {
+        getDailyNutritionTotal(for: .dietaryCarbohydrates, unit: .gram(), completion: completion)
+    }
+    
+    // Gets today's total protein consumed
+    private func getTodayProtein(completion: @escaping (Double, Error?) -> Void) {
+        getDailyNutritionTotal(for: .dietaryProtein, unit: .gram(), completion: completion)
+    }
+    
+    // Helper method to get daily nutrition totals
+    private func getDailyNutritionTotal(for identifier: HKQuantityTypeIdentifier, unit: HKUnit, completion: @escaping (Double, Error?) -> Void) {
+        guard let nutritionType = HKQuantityType.quantityType(forIdentifier: identifier) else {
             completion(0, nil)
             return
         }
         
         let now = Date()
         let startOfDay = Calendar.current.startOfDay(for: now)
-        print("Querying steps from \(startOfDay) to \(now)")
         
         let predicate = HKQuery.predicateForSamples(
             withStart: startOfDay,
@@ -75,82 +191,231 @@ class HealthKitManager {
             options: .strictStartDate
         )
         
+        let query = HKStatisticsQuery(
+            quantityType: nutritionType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum
+        ) { query, statistics, error in
+            if let error = error {
+                completion(0, error)
+                return
+            }
+            
+            let total = statistics?.sumQuantity()?.doubleValue(for: unit) ?? 0
+            completion(total, nil)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    // Gets weekly fitness data for a specific metric
+    func getWeeklyFitnessData(for type: FitnessMetricType, weeks: Int = 8, settings: TrackingSettings, completion: @escaping ([WeeklyFitnessData], Error?) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        var weeklyData: [WeeklyFitnessData] = []
+        
+        let group = DispatchGroup()
+        var errors: [Error] = []
+        
+        for weekOffset in 0..<weeks {
+            group.enter()
+            
+            // Calculate week start and end dates
+            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: calendar.startOfDay(for: now)),
+                  let weekInterval = calendar.dateInterval(of: .weekOfYear, for: weekStart) else {
+                group.leave()
+                continue
+            }
+            
+            getWeeklyAverage(for: type, startDate: weekInterval.start, endDate: weekInterval.end) { average, daysWithData, error in
+                if let error = error {
+                    errors.append(error)
+                } else {
+                    let target = self.getTarget(for: type, settings: settings)
+                    
+                    // Get previous week average for weight comparison
+                    var previousWeekAverage: Double? = nil
+                    if type == .weight && weekOffset < weeks - 1 {
+                        if let prevWeekStart = calendar.date(byAdding: .weekOfYear, value: -(weekOffset + 1), to: calendar.startOfDay(for: now)),
+                           let prevWeekInterval = calendar.dateInterval(of: .weekOfYear, for: prevWeekStart) {
+                            self.getWeeklyAverage(for: type, startDate: prevWeekInterval.start, endDate: prevWeekInterval.end) { prevAverage, _, _ in
+                                previousWeekAverage = prevAverage > 0 ? prevAverage : nil
+                            }
+                        }
+                    }
+                    
+                    let weekData = WeeklyFitnessData(
+                        weekStartDate: weekInterval.start,
+                        weekEndDate: weekInterval.end,
+                        type: type,
+                        dailyAverage: average,
+                        daysWithData: daysWithData,
+                        target: target,
+                        previousWeekAverage: previousWeekAverage
+                    )
+                    weeklyData.append(weekData)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            let sortedData = weeklyData.sorted { $0.weekStartDate > $1.weekStartDate }
+            completion(sortedData, errors.first)
+        }
+    }
+    
+    // Gets weekly average for a specific metric
+    private func getWeeklyAverage(for type: FitnessMetricType, startDate: Date, endDate: Date, completion: @escaping (Double, Int, Error?) -> Void) {
+        switch type {
+        case .weight:
+            getWeeklyWeightAverage(startDate: startDate, endDate: endDate, completion: completion)
+        case .calories:
+            getWeeklyNutritionAverage(for: .dietaryEnergyConsumed, unit: .kilocalorie(), startDate: startDate, endDate: endDate, completion: completion)
+        case .carbs:
+            getWeeklyNutritionAverage(for: .dietaryCarbohydrates, unit: .gram(), startDate: startDate, endDate: endDate, completion: completion)
+        case .protein:
+            getWeeklyNutritionAverage(for: .dietaryProtein, unit: .gram(), startDate: startDate, endDate: endDate, completion: completion)
+        }
+    }
+    
+    // Gets weekly weight average
+    private func getWeeklyWeightAverage(startDate: Date, endDate: Date, completion: @escaping (Double, Int, Error?) -> Void) {
+        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
+            completion(0, 0, nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        
+        let query = HKSampleQuery(
+            sampleType: weightType,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: nil
+        ) { query, samples, error in
+            if let error = error {
+                completion(0, 0, error)
+                return
+            }
+            
+            guard let samples = samples as? [HKQuantitySample], !samples.isEmpty else {
+                completion(0, 0, nil)
+                return
+            }
+            
+            let totalWeight = samples.reduce(0) { total, sample in
+                total + sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            }
+            
+            let average = totalWeight / Double(samples.count)
+            let daysWithData = Set(samples.map { Calendar.current.startOfDay(for: $0.startDate) }).count
+            
+            completion(average, daysWithData, nil)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    // Gets weekly nutrition average
+    private func getWeeklyNutritionAverage(for identifier: HKQuantityTypeIdentifier, unit: HKUnit, startDate: Date, endDate: Date, completion: @escaping (Double, Int, Error?) -> Void) {
+        guard let nutritionType = HKQuantityType.quantityType(forIdentifier: identifier) else {
+            completion(0, 0, nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        
         let query = HKStatisticsCollectionQuery(
-            quantityType: stepType,
+            quantityType: nutritionType,
             quantitySamplePredicate: predicate,
             options: .cumulativeSum,
-            anchorDate: startOfDay,
+            anchorDate: startDate,
             intervalComponents: DateComponents(day: 1)
         )
         
         query.initialResultsHandler = { query, results, error in
             if let error = error {
-                print("HealthKit Query Error: \(error.localizedDescription)")
-                completion(0, error)
+                completion(0, 0, error)
                 return
             }
             
             guard let results = results else {
-                print("No results returned from HealthKit")
-                completion(0, nil)
+                completion(0, 0, nil)
                 return
             }
             
-            results.enumerateStatistics(from: startOfDay, to: now) { statistics, stop in
+            var totalValue: Double = 0
+            var daysWithData = 0
+            
+            results.enumerateStatistics(from: startDate, to: endDate) { statistics, stop in
                 if let quantity = statistics.sumQuantity() {
-                    let steps = Int(quantity.doubleValue(for: HKUnit.count()))
-                    print("Steps retrieved from HealthKit: \(steps)")
-                    completion(steps, nil)
-                } else {
-                    print("No steps quantity available for period")
-                    completion(0, nil)
+                    let value = quantity.doubleValue(for: unit)
+                    if value > 0 {
+                        totalValue += value
+                        daysWithData += 1
+                    }
                 }
             }
+            
+            let average = daysWithData > 0 ? totalValue / Double(daysWithData) : 0
+            completion(average, daysWithData, nil)
         }
         
-        print("Executing HealthKit query...")
         healthStore.execute(query)
     }
     
-    // Starts observing step count changes by:
-    // - Setting up a real-time observer query
-    // - Creating an anchored query for historical changes
+    // Gets target value for a specific metric type
+    private func getTarget(for type: FitnessMetricType, settings: TrackingSettings) -> Double {
+        switch type {
+        case .weight:
+            return settings.goalWeight
+        case .calories:
+            return Double(settings.maxDailyCalories)
+        case .carbs:
+            return Double(settings.maxDailyCarbs)
+        case .protein:
+            return Double(settings.targetProtein)
+        }
+    }
+    
+    // Starts observing fitness data changes by:
+    // - Setting up real-time observer queries
+    // - Creating anchored queries for historical changes
     // - Enabling background delivery of updates
     // Parameters:
     // - completion: Called when observers are set up
-    func startStepObserver(completion: @escaping () -> Void) {
-        print("🏃‍♂️ Starting step observer...")
+    func startFitnessObserver(completion: @escaping () -> Void) {
+        print("🏃‍♂️ Starting fitness observer...")
         
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            print("Step count type is not available")
-            completion()
-            return
+        for type in fitnessTypes {
+            startRegularObserver(for: type)
+            startAnchoredObserver(for: type)
         }
-        
-        startRegularObserver(for: stepType)
-        startAnchoredObserver(for: stepType)
         
         completion()
     }
     
-    // Updates the step count in shared UserDefaults
-    // Used by the widget to display current steps
+    // Updates the fitness data in shared UserDefaults
+    // Used by the widget to display current data
     // Parameters:
-    // - steps: Current step count to save
-    private func updateSharedDefaults(steps: Int) {
-        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing") {
-            defaults.set(steps, forKey: "lastSteps")
-            print("Saved steps to shared defaults: \(steps)")
+    // - data: Current fitness data to save
+    private func updateSharedDefaults(data: DailyFitnessData) {
+        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.FitKing") {
+            if let encoded = try? JSONEncoder().encode(data) {
+                defaults.set(encoded, forKey: "lastFitnessData")
+                print("Saved fitness data to shared defaults")
+            }
         }
     }
     
-    // Sets up real-time step count observer that:
-    // - Triggers immediately when new steps are recorded
+    // Sets up real-time fitness data observer that:
+    // - Triggers immediately when new data is recorded
     // - Manages background task lifecycle
-    // - Updates shared step count
+    // - Updates shared fitness data
     // - Schedules notifications if needed
-    private func startRegularObserver(for stepType: HKQuantityType) {
-        let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] query, completionHandler, error in
+    private func startRegularObserver(for type: HKQuantityType) {
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] query, completionHandler, error in
             var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
             
             // Create background task with timeout
@@ -188,9 +453,9 @@ class HealthKitManager {
                 return
             }
             
-            // Set up a timeout for getTodaySteps to prevent hanging
+            // Set up a timeout for getTodayFitnessData to prevent hanging
             let workItem = DispatchWorkItem {
-                print("⏱️ getTodaySteps timed out")
+                print("⏱️ getTodayFitnessData timed out")
                 completionHandler()
                 if backgroundTaskId != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskId)
@@ -199,8 +464,8 @@ class HealthKitManager {
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: workItem)
             
-            // Query current step count and handle the response
-            self.getTodaySteps { steps, error in
+            // Query current fitness data and handle the response
+            self.getTodayFitnessData { data, error in
                 // Cancel the timeout since we got a response
                 workItem.cancel()
                 
@@ -216,9 +481,8 @@ class HealthKitManager {
                             let finalState = UIApplication.shared.applicationState
                             // Log detailed state information for debugging
                             print("""
-                                📊 Step Observer Update (Delayed):
-                                - Current steps: \(steps)
-                                - Goal: \(settings.dailyStepGoal)
+                                📊 Fitness Observer Update (Delayed):
+                                - Current data: \(data)
                                 - Within tracking period: \(settings.isWithinTrackingPeriod())
                                 - Initial state: \(appState.rawValue)
                                 - Final state: \(finalState.rawValue)
@@ -228,49 +492,41 @@ class HealthKitManager {
                             // - Within user's tracking period
                             // - App has fully transitioned to background
                             if settings.isWithinTrackingPeriod() && finalState == .background {
-                                NotificationManager.shared.scheduleStepProgressNotification(
-                                    currentSteps: steps,
-                                    goalSteps: settings.dailyStepGoal,
-                                    endTime: settings.todayEndTime,
+                                NotificationManager.shared.scheduleFitnessProgressNotification(
+                                    fitnessData: data,
+                                    settings: settings,
                                     date: Date(),
                                     source: .healthKitObserver
                                 )
                             }
-                            // Update step count in shared storage and notify observers
-                            self.updateSteps(steps)
+                            // Update fitness data in shared storage and notify observers
+                            self.updateFitnessData(data)
                         }
                     } else {
                         // Handle immediate updates when app state isn't changing
                         // Log current state for debugging
                         print("""
-                            📊 Step Observer Update:
-                            - Current steps: \(steps)
-                            - Goal: \(settings.dailyStepGoal)
+                            📊 Fitness Observer Update:
+                            - Current data: \(data)
                             - Within tracking period: \(settings.isWithinTrackingPeriod())
                             - App state: \(appState.rawValue)
                             """)
                         
-                        // Schedule notification only if:
-                        // - Within user's tracking period
-                        // - App is already in background
+                        // Schedule notification if within tracking period and in background
                         if settings.isWithinTrackingPeriod() && appState == .background {
-                            NotificationManager.shared.scheduleStepProgressNotification(
-                                currentSteps: steps,
-                                goalSteps: settings.dailyStepGoal,
-                                endTime: settings.todayEndTime,
+                            NotificationManager.shared.scheduleFitnessProgressNotification(
+                                fitnessData: data,
+                                settings: settings,
                                 date: Date(),
                                 source: .healthKitObserver
                             )
-                        } else {
-                            print("📱 Skipping notification - app not in background")
                         }
                         
-                        // Update step count in both shared defaults and through notification
-                        self.updateSharedDefaults(steps: steps)
-                        self.updateSteps(steps)
+                        // Update fitness data in shared storage and notify observers
+                        self.updateFitnessData(data)
                     }
                     
-                    // Clean up background task
+                    // Complete the task
                     completionHandler()
                     if backgroundTaskId != .invalid {
                         UIApplication.shared.endBackgroundTask(backgroundTaskId)
@@ -279,283 +535,69 @@ class HealthKitManager {
             }
         }
         
-        // Start the observer query and retain it
+        observerQueries.append(query)
         healthStore.execute(query)
-        observerQuery = query
     }
     
-    // Sets up an anchored query that:
-    // - Tracks historical step count changes
-    // - Handles device-locked scenarios
-    // - Updates shared step count
-    // - Manages its own background task lifecycle
-    private func startAnchoredObserver(for stepType: HKQuantityType) {
-        let now = Date()
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startOfDay,
-            end: now,
-            options: .strictStartDate
-        )
-        
-        let anchoredQuery = HKAnchoredObjectQuery(
-            type: stepType,
-            predicate: predicate,
+    // Sets up anchored observer for tracking changes since last update
+    private func startAnchoredObserver(for type: HKQuantityType) {
+        let query = HKAnchoredObjectQuery(
+            type: type,
+            predicate: nil,
             anchor: nil,
             limit: HKObjectQueryNoLimit
-        ) { [weak self] query, _, _, _, error in
-            guard let self = self else { return }
-            
-            var backgroundTaskId = UIBackgroundTaskIdentifier.invalid
-            backgroundTaskId = UIApplication.shared.beginBackgroundTask { 
-                if backgroundTaskId != .invalid {
-                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
-                }
-            }
-            
-            func endBackgroundTask(reason: String) {
-                print("📍 Ending anchored query background task: \(reason)")
-                if backgroundTaskId != .invalid {
-                    UIApplication.shared.endBackgroundTask(backgroundTaskId)
-                }
-            }
-            
+        ) { [weak self] query, samples, deletedObjects, anchor, error in
             if let error = error {
-                print("📍 Anchored query error: \(error.localizedDescription)")
-                if error.localizedDescription.contains("Protected health data is inaccessible") {
-                    print("📍 Protected data error - using last known steps")
-                    // Use shared defaults when device is locked
-                    if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing"),
-                       let lastKnownSteps = defaults.object(forKey: "lastSteps") as? Int {
-                        print("📍 Last known steps from defaults: \(lastKnownSteps)")
-                        DispatchQueue.main.async {
-                            self.updateSteps(lastKnownSteps)
-                            endBackgroundTask(reason: "used last known steps")
-                        }
-                        return
+                print("❌ Anchored query error: \(error.localizedDescription)")
+                return
+            }
+            
+            if let samples = samples, !samples.isEmpty {
+                print("📈 Received \(samples.count) new fitness samples")
+                
+                // Trigger fitness data update
+                self?.getTodayFitnessData { data, error in
+                    DispatchQueue.main.async {
+                        self?.updateFitnessData(data)
                     }
                 }
-                endBackgroundTask(reason: "error occurred")
+            }
+        }
+        
+        query.updateHandler = { [weak self] query, samples, deletedObjects, anchor, error in
+            if let error = error {
+                print("❌ Anchored query update error: \(error.localizedDescription)")
                 return
             }
             
-            print("📍 Anchored query received update - querying total steps...")
-            self.getTodaySteps { steps, error in
-                if let error = error {
-                    print("📍 Could not get total steps: \(error.localizedDescription)")
-                    endBackgroundTask(reason: "getTodaySteps error")
-                    return
-                }
-                DispatchQueue.main.async {
-                    self.updateSteps(steps)
-                    endBackgroundTask(reason: "steps updated")
-                }
-            }
-        }
-        
-        anchoredQuery.updateHandler = { query, samples, deletedObjects, newAnchor, error in
-            print("📍 Anchored query update handler called")
-            if let error = error {
-                print("📍 Anchored query update error: \(error.localizedDescription)")
-                return
-            }
-            
-            if let samples = samples {
-                print("📍 Anchored query received \(samples.count) updates in update handler")
-            }
-        }
-        
-        healthStore.execute(anchoredQuery)
-        self.anchoredQuery = anchoredQuery
-        print("📍 Anchored query started")
-    }
-    
-    // Stops all step count observers:
-    // - Cancels the real-time observer query
-    // - Stops the anchored query
-    // - Disables background delivery
-    func stopStepObserver() {
-        if let query = observerQuery {
-            healthStore.stop(query)
-            observerQuery = nil
-        }
-        
-        if let query = anchoredQuery {
-            healthStore.stop(query)
-            anchoredQuery = nil
-            print("📍 Anchored query stopped")
-        }
-        
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
-        
-        healthStore.disableBackgroundDelivery(for: stepType) { success, error in
-            if let error = error {
-                print("❌ Failed to disable background delivery: \(error.localizedDescription)")
-                return
-            }
-            print("✅ Background delivery disabled")
-        }
-    }
-    
-    // Enables background delivery of step count updates
-    // Called when app needs real-time step data in background
-    func enableBackgroundDelivery(completion: @escaping () -> Void) {
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            completion()
-            return
-        }
-        
-        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
-            if let error = error {
-                print("❌ Failed to enable background delivery: \(error.localizedDescription)")
-                completion()
-                return
-            }
-            print("✅ Background delivery enabled for background mode")
-            completion()
-        }
-    }
-    
-    // Disables background delivery of step count updates
-    // Called when app doesn't need real-time updates
-    func disableBackgroundDelivery(completion: @escaping () -> Void) {
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            completion()
-            return
-        }
-        
-        healthStore.disableBackgroundDelivery(for: stepType) { success, error in
-            if let error = error {
-                print("❌ Failed to disable background delivery: \(error.localizedDescription)")
-                completion()
-                return
-            }
-            print("✅ Background delivery disabled for active mode")
-            completion()
-        }
-    }
-    
-    // Updates step count and notifies observers by:
-    // - Saving to shared UserDefaults for widget
-    // - Posting notification for UI updates
-    // Parameters:
-    // - steps: Current step count to broadcast
-    private func updateSteps(_ steps: Int) {
-        DispatchQueue.main.async {
-            self.updateSharedDefaults(steps: steps)
-            NotificationCenter.default.post(
-                name: .init("StepKingStepsUpdated"),
-                object: nil,
-                userInfo: ["steps": steps]
-            )
-        }
-    }
-    
-    // Gets weekly step data for the past 12 weeks
-    // Returns an array of WeeklyStepData with daily averages
-    // Parameters:
-    // - goalSteps: Daily step goal to calculate progress against
-    // - completion: Called with array of weekly data or error
-    func getWeeklyStepData(goalSteps: Int, completion: @escaping ([WeeklyStepData], Error?) -> Void) {
-        print("Getting weekly step data for past 12 weeks...")
-        
-        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
-            print("Step count type is not available")
-            completion([], nil)
-            return
-        }
-        
-        let calendar = Calendar.current
-        let now = Date()
-        
-        // Calculate the start of the current week (Sunday)
-        let currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
-        
-        // Go back 12 weeks from current week start
-        guard let startDate = calendar.date(byAdding: .weekOfYear, value: -11, to: currentWeekStart) else {
-            completion([], nil)
-            return
-        }
-        
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startDate,
-            end: now,
-            options: .strictStartDate
-        )
-        
-        let query = HKStatisticsCollectionQuery(
-            quantityType: stepType,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum,
-            anchorDate: startDate,
-            intervalComponents: DateComponents(day: 1)
-        )
-        
-        query.initialResultsHandler = { query, results, error in
-            if let error = error {
-                print("HealthKit Weekly Query Error: \(error.localizedDescription)")
-                completion([], error)
-                return
-            }
-            
-            guard let results = results else {
-                print("No weekly results returned from HealthKit")
-                completion([], nil)
-                return
-            }
-            
-            var weeklyData: [WeeklyStepData] = []
-            
-            // Process data week by week
-            for weekOffset in 0..<12 {
-                guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: startDate) else {
-                    continue
-                }
+            if let samples = samples, !samples.isEmpty {
+                print("📈 Anchored update: \(samples.count) new fitness samples")
                 
-                guard let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) else {
-                    continue
-                }
-                
-                // Don't go beyond current date
-                let actualWeekEnd = min(weekEnd, now)
-                
-                var totalSteps = 0
-                var daysWithData = 0
-                
-                // Sum up steps for each day in the week
-                results.enumerateStatistics(from: weekStart, to: actualWeekEnd) { statistics, stop in
-                    if let quantity = statistics.sumQuantity() {
-                        let daySteps = Int(quantity.doubleValue(for: HKUnit.count()))
-                        if daySteps > 0 {
-                            totalSteps += daySteps
-                            daysWithData += 1
-                        }
+                // Trigger fitness data update
+                self?.getTodayFitnessData { data, error in
+                    DispatchQueue.main.async {
+                        self?.updateFitnessData(data)
                     }
                 }
-                
-                // Calculate daily average (only count days with data to avoid dilution)
-                let dailyAverage = daysWithData > 0 ? totalSteps / daysWithData : 0
-                
-                let weekData = WeeklyStepData(
-                    weekStartDate: weekStart,
-                    weekEndDate: actualWeekEnd,
-                    totalSteps: totalSteps,
-                    dailyAverage: dailyAverage,
-                    daysWithData: daysWithData,
-                    goalSteps: goalSteps
-                )
-                
-                weeklyData.append(weekData)
             }
-            
-            // Sort by week start date (most recent first)
-            weeklyData.sort { $0.weekStartDate > $1.weekStartDate }
-            
-            print("Retrieved \(weeklyData.count) weeks of step data")
-            completion(weeklyData, nil)
         }
         
-        print("Executing weekly HealthKit query...")
+        anchoredQueries.append(query)
         healthStore.execute(query)
+    }
+    
+    // Updates fitness data and notifies observers
+    private func updateFitnessData(_ data: DailyFitnessData) {
+        updateSharedDefaults(data: data)
+        
+        // Notify the app about fitness data updates
+        NotificationCenter.default.post(
+            name: .init("FitKingFitnessUpdated"),
+            object: nil,
+            userInfo: ["fitnessData": data]
+        )
+        
+        // Reload widget timelines
+        WidgetCenter.shared.reloadAllTimelines()
     }
 } 

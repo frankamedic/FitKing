@@ -13,7 +13,7 @@ class NotificationManager {
     
     // Matches the background task identifier in Info.plist
     // Used by iOS to identify our background refresh requests
-    static let backgroundTaskIdentifier = "com.sloaninnovation.StepKing.refresh"
+    static let backgroundTaskIdentifier = "com.sloaninnovation.FitKing.refresh"
     
     // Tracks when we last showed a notification
     // Used to prevent showing notifications too frequently
@@ -147,7 +147,7 @@ class NotificationManager {
     // A dedicated queue for processing notifications
     // Ensures only one notification is being scheduled at a time
     // Prevents conflicts when multiple parts of the app request notifications
-    private let notificationQueue = DispatchQueue(label: "com.sloaninnovation.StepKing.notificationQueue")
+    private let notificationQueue = DispatchQueue(label: "com.sloaninnovation.FitKing.notificationQueue")
     
     // Tracks if we're currently in the process of scheduling a notification
     // Helps prevent duplicate notifications from being scheduled
@@ -207,6 +207,139 @@ class NotificationManager {
                 currentSteps: currentSteps,
                 goalSteps: goalSteps,
                 endTime: endTime
+            ) else {
+                print("❌ No notification content created - conditions not met")
+                return
+            }
+            
+            // Schedule notification and refresh background tasks
+            DispatchQueue.main.sync {
+                self.scheduleNotification(title: title, body: body, date: date)
+                self.rescheduleBackgroundRefresh()
+            }
+        }
+    }
+    
+    // Creates the content for a fitness progress notification by:
+    // - Checking which metrics need attention
+    // - Determining time left in tracking period
+    // - Creating motivational messaging
+    // Returns: Title and body text for notification, or nil if no notification needed
+    func createFitnessProgressNotification(fitnessData: DailyFitnessData, settings: TrackingSettings, endTime: Date) -> (title: String, body: String)? {
+        print("📝 Creating fitness progress notification...")
+        
+        let hoursRemaining = Date().distance(to: endTime) / 3600
+        print("- Hours remaining: \(hoursRemaining)")
+        
+        guard hoursRemaining > 0 else {
+            print("⚠️ No notification needed - past end time")
+            return nil
+        }
+        
+        // Check which metrics need attention
+        var needsAttention: [FitnessMetricType] = []
+        
+        for metricType in FitnessMetricType.allCases {
+            let status = fitnessData.getProgressStatus(for: metricType, settings: settings)
+            if !status.isSuccess && status.percentage < 0.8 {
+                needsAttention.append(metricType)
+            }
+        }
+        
+        guard !needsAttention.isEmpty else {
+            print("⚠️ No notification needed - all metrics on track")
+            return nil
+        }
+        
+        print("📊 Metrics needing attention: \(needsAttention.map { $0.rawValue })")
+        
+        // Format end time
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        let formattedEndTime = formatter.string(from: endTime)
+        
+        let title: String
+        let body: String
+        
+        if needsAttention.count == 1 {
+            let metric = needsAttention[0]
+            let status = fitnessData.getProgressStatus(for: metric, settings: settings)
+            
+            switch metric {
+            case .weight:
+                title = "Weight Goal Check-in 💪"
+                body = "Track your weight to stay on target"
+            case .calories:
+                let remaining = Int(status.target - status.current)
+                title = "Calorie Limit Alert 🔥"
+                body = "You have \(remaining) calories left until \(formattedEndTime)"
+            case .carbs:
+                let remaining = Int(status.target - status.current)
+                title = "Carb Limit Alert 🍞"
+                body = "You have \(remaining)g carbs left until \(formattedEndTime)"
+            case .protein:
+                let needed = Int(status.target - status.current)
+                title = "Protein Goal Reminder 🥩"
+                body = "You need \(needed)g more protein by \(formattedEndTime)"
+            }
+        } else {
+            title = "Fitness Goals Check-in 🎯"
+            let metricNames = needsAttention.prefix(2).map { $0.rawValue }.joined(separator: " & ")
+            body = "\(metricNames) need attention. \(Int(hoursRemaining))h left to reach your goals!"
+        }
+        
+        print("✅ Creating notification content")
+        return (title: title, body: body)
+    }
+    
+    // Attempts to schedule a fitness progress notification if:
+    // - Enough time has passed since last notification
+    // - User has metrics that need attention
+    // - App is in background state
+    // - We're within the user's tracking period
+    // Parameters:
+    // - fitnessData: Current day's fitness data
+    // - settings: User's fitness goals and preferences
+    // - date: When to show the notification
+    // - source: What triggered this notification request
+    func scheduleFitnessProgressNotification(
+        fitnessData: DailyFitnessData,
+        settings: TrackingSettings,
+        date: Date,
+        source: NotificationSource = .backgroundRefresh
+    ) {
+        // Process notification request on dedicated queue
+        notificationQueue.async { [weak self] in
+            guard let self = self,
+                  !self.isSchedulingNotification else {
+                print("⏳ Already scheduling a notification, skipping...")
+                return
+            }
+            
+            self.isSchedulingNotification = true
+            defer { self.isSchedulingNotification = false }
+            
+            // Validate input parameters
+            guard date.timeIntervalSinceNow > -1 else {
+                print("❌ Invalid parameters for notification scheduling:")
+                print("- Schedule date: \(date)")
+                return
+            }
+            
+            let notificationInterval = settings.notificationFrequency * 60
+            let timeSinceLastNotification = Date().timeIntervalSince(self.lastNotificationTime)
+            
+            guard timeSinceLastNotification >= notificationInterval else {
+                print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(notificationInterval)s)")
+                return
+            }
+            
+            // Try to create notification content
+            guard let (title, body) = self.createFitnessProgressNotification(
+                fitnessData: fitnessData,
+                settings: settings,
+                endTime: settings.todayEndTime
             ) else {
                 print("❌ No notification content created - conditions not met")
                 return
@@ -362,7 +495,10 @@ class NotificationManager {
         print("""
             📋 Current Settings:
             - Notification frequency: \(settings.notificationFrequency) minutes
-            - Daily goal: \(settings.dailyStepGoal) steps
+            - Weight goal: \(settings.goalWeight) kg
+            - Max calories: \(settings.maxDailyCalories) cal
+            - Max carbs: \(settings.maxDailyCarbs) g
+            - Target protein: \(settings.targetProtein) g
             - Start time: \(settings.startTime)
             - End time: \(settings.endTime)
             - Current time in window: \(settings.isWithinTrackingPeriod())
@@ -379,14 +515,14 @@ class NotificationManager {
             return
         }
         
-        // Try to get steps from shared defaults first (faster than HealthKit)
-        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.StepKing"),
-           let lastKnownSteps = defaults.object(forKey: "lastSteps") as? Int {
-            print("📊 Using last known steps from defaults: \(lastKnownSteps)")
-            self.scheduleStepProgressNotification(
-                currentSteps: lastKnownSteps,
-                goalSteps: settings.dailyStepGoal,
-                endTime: settings.todayEndTime,
+        // Try to get fitness data from shared defaults first (faster than HealthKit)
+        if let defaults = UserDefaults(suiteName: "group.com.sloaninnovation.FitKing"),
+           let data = defaults.data(forKey: "lastFitnessData"),
+           let lastKnownFitnessData = try? JSONDecoder().decode(DailyFitnessData.self, from: data) {
+            print("📊 Using last known fitness data from defaults: \(lastKnownFitnessData)")
+            self.scheduleFitnessProgressNotification(
+                fitnessData: lastKnownFitnessData,
+                settings: settings,
                 date: Date()
             )
             task.setTaskCompleted(success: true)
@@ -396,8 +532,8 @@ class NotificationManager {
         // Fall back to HealthKit if needed
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
-                print("🏃‍♂️ Requesting current step count...")
-                HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+                print("🏃‍♂️ Requesting current fitness data...")
+                HealthKitManager.shared.getTodayFitnessData { [weak self] fitnessData, error in
                     timeoutWorkItem.cancel()
                     
                     guard let self = self else {
@@ -413,18 +549,17 @@ class NotificationManager {
                     }
                     
                     print("""
-                        📊 Step Progress:
-                        - Current steps: \(steps)
-                        - Goal: \(settings.dailyStepGoal)
-                        - Progress: \(Int((Double(steps) / Double(settings.dailyStepGoal)) * 100))%
-                        - Remaining: \(max(0, settings.dailyStepGoal - steps))
+                        📊 Fitness Progress:
+                        - Weight: \(String(format: "%.1f", fitnessData.weight)) kg (target: \(String(format: "%.1f", settings.goalWeight)) kg)
+                        - Calories: \(Int(fitnessData.calories)) cal (max: \(settings.maxDailyCalories) cal)
+                        - Carbs: \(Int(fitnessData.carbs)) g (max: \(settings.maxDailyCarbs) g)
+                        - Protein: \(Int(fitnessData.protein)) g (target: \(settings.targetProtein) g)
                         """)
                     
                     print("🔔 Attempting to schedule notification...")
-                    self.scheduleStepProgressNotification(
-                        currentSteps: steps,
-                        goalSteps: settings.dailyStepGoal,
-                        endTime: settings.todayEndTime,
+                    self.scheduleFitnessProgressNotification(
+                        fitnessData: fitnessData,
+                        settings: settings,
                         date: Date()
                     )
                     

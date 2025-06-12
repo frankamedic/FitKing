@@ -1,18 +1,19 @@
 import Foundation
 import Combine
 
-class WeeklyStepsViewModel: ObservableObject {
-    @Published var weeklyData: [WeeklyStepData] = []
+class WeeklyFitnessViewModel: ObservableObject {
+    @Published var weeklyData: [WeeklyFitnessData] = []
     @Published var isLoading: Bool = false
     @Published var error: String? = nil
+    @Published var selectedMetric: FitnessMetricType = .weight
     
-    private let healthKitManager = HealthKitManager.shared
-    
-    func loadWeeklyData(goalSteps: Int) {
+    func loadWeeklyData(for metric: FitnessMetricType, settings: TrackingSettings) {
+        guard !isLoading else { return }
+        
         isLoading = true
         error = nil
         
-        healthKitManager.getWeeklyStepData(goalSteps: goalSteps) { [weak self] data, error in
+        HealthKitManager.shared.getWeeklyFitnessData(for: metric, settings: settings) { [weak self] data, error in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 
@@ -27,7 +28,9 @@ class WeeklyStepsViewModel: ObservableObject {
         }
     }
     
-    func refreshData(goalSteps: Int) {
-        loadWeeklyData(goalSteps: goalSteps)
+    func refreshData(for metric: FitnessMetricType, settings: TrackingSettings) {
+        // Force refresh by clearing current data
+        weeklyData = []
+        loadWeeklyData(for: metric, settings: settings)
     }
 } 

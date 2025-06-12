@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var viewModel = StepKingViewModel()
+    @StateObject private var viewModel = FitKingViewModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showToast = false
     @State private var toastMessage: String?
@@ -11,10 +11,10 @@ struct ContentView: View {
             TabView {
                 ProgressView(viewModel: viewModel)
                     .tabItem {
-                        Label("Progress", systemImage: "figure.walk")
+                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
                     }
                 
-                WeeklyStepsView(mainViewModel: viewModel)
+                WeeklyFitnessView(mainViewModel: viewModel)
                     .tabItem {
                         Label("Weekly", systemImage: "calendar")
                     }

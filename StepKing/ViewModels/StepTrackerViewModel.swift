@@ -3,8 +3,8 @@ import Combine
 import SwiftUI
 import WidgetKit
 
-class StepKingViewModel: ObservableObject {
-    private let groupID = "group.com.sloaninnovation.StepKing"
+class FitKingViewModel: ObservableObject {
+    private let groupID = "group.com.sloaninnovation.FitKing"
     private var sharedDefaults: UserDefaults?
     
     @Published var settings: TrackingSettings {
@@ -13,7 +13,7 @@ class StepKingViewModel: ObservableObject {
             scheduleProgressCheck()
         }
     }
-    @Published var currentSteps: Int = 0 {
+    @Published var currentFitnessData: DailyFitnessData = DailyFitnessData() {
         didSet {
             WidgetCenter.shared.reloadAllTimelines()
         }
@@ -30,24 +30,23 @@ class StepKingViewModel: ObservableObject {
         self.settings = TrackingSettings.load()
         self.sharedDefaults = UserDefaults(suiteName: groupID)
         
-        // Listen for step updates from observers
+        // Listen for fitness data updates from observers
         NotificationCenter.default.addObserver(
-            forName: .init("StepKingStepsUpdated"),
+            forName: .init("FitKingFitnessUpdated"),
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let steps = notification.userInfo?["steps"] as? Int {
-                self?.currentSteps = steps
+            if let fitnessData = notification.userInfo?["fitnessData"] as? DailyFitnessData {
+                self?.currentFitnessData = fitnessData
             }
         }
     }
     
     func startTracking() {
         DispatchQueue.main.async {
-            print("Starting step tracking")
+            print("Starting fitness tracking")
             self.isTracking = true
-            // self.updateSteps()  // Comment out - observers will handle updates
-            // self.startLiveUpdates()  // Comment out - no need for timer-based updates
+            // Observers will handle updates automatically
         }
     }
     
@@ -68,10 +67,9 @@ class StepKingViewModel: ObservableObject {
         // Only schedule if within tracking hours
         if Calendar.current.component(.hour, from: nextCheck) <= 
            Calendar.current.component(.hour, from: settings.todayEndTime) {
-            NotificationManager.shared.scheduleStepProgressNotification(
-                currentSteps: currentSteps,
-                goalSteps: settings.dailyStepGoal,
-                endTime: settings.todayEndTime,
+            NotificationManager.shared.scheduleFitnessProgressNotification(
+                fitnessData: currentFitnessData,
+                settings: settings,
                 date: nextCheck
             )
         }
@@ -84,17 +82,15 @@ class StepKingViewModel: ObservableObject {
             return
         }
         
-        print("Checking step progress...")
-        // Comment out direct query - observers will handle updates
-        // HealthKitManager.shared.getTodaySteps { [weak self] steps, error in ... }
+        print("Checking fitness progress...")
         
-        // Instead, use current steps from observers
-        self.analyzeProgress(steps: self.currentSteps)
+        // Use current fitness data from observers
+        self.analyzeProgress(data: self.currentFitnessData)
         self.lastProgressCheck = now
     }
     
-    private func analyzeProgress(steps: Int) {
-        print("Analyzing progress with current steps: \(currentSteps)")
+    private func analyzeProgress(data: DailyFitnessData) {
+        print("Analyzing progress with current fitness data: \(data)")
         let now = Date()
         
         // Only send notifications during the user's preferred time window
@@ -102,8 +98,6 @@ class StepKingViewModel: ObservableObject {
             print("Outside notification window (\(settings.startTime) to \(settings.todayEndTime)) - skipping notification")
             return
         }
-        
-        let stepsNeeded = settings.dailyStepGoal - currentSteps
         
         // Calculate remaining hours until end of tracking period
         let calendar = Calendar.current
@@ -119,63 +113,67 @@ class StepKingViewModel: ObservableObject {
             1.0
         )
         
-        // Calculate required pace
-        let stepsPerHour = Int(round(Double(stepsNeeded) / remainingHours / 10) * 10)
-        
         print("""
             Progress Analysis:
-            - Current steps: \(currentSteps)
-            - Daily goal: \(settings.dailyStepGoal)
-            - Steps needed: \(stepsNeeded)
+            - Current data: \(data)
+            - Settings: \(settings)
             - Remaining hours until \(endDateTime): \(remainingHours)
-            - Required pace: \(stepsPerHour) steps/hour
             """)
         
-        // Only notify if the required pace is significant
-        if stepsPerHour > 100 {
+        // Check if any metrics need attention
+        var needsAttention = false
+        
+        for metricType in FitnessMetricType.allCases {
+            let status = data.getProgressStatus(for: metricType, settings: settings)
+            if !status.isSuccess && status.percentage < 0.8 {
+                needsAttention = true
+                break
+            }
+        }
+        
+        if needsAttention {
             let timeFormatter = DateFormatter()
             timeFormatter.timeStyle = .short
             
-            NotificationManager.shared.scheduleStepProgressNotification(
-                currentSteps: currentSteps,
-                goalSteps: settings.dailyStepGoal,
-                endTime: settings.todayEndTime,
+            NotificationManager.shared.scheduleFitnessProgressNotification(
+                fitnessData: currentFitnessData,
+                settings: settings,
                 date: now
             )
         }
     }
     
     private func startLiveUpdates() {
-        // Update UI every 10 seconds
+        // Update UI every 30 seconds
         updateTimer?.invalidate()
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.updateSteps()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.updateFitnessData()
         }
     }
     
-    private func updateSteps() {
-        HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+    private func updateFitnessData() {
+        HealthKitManager.shared.getTodayFitnessData { [weak self] data, error in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
                 if let error = error {
-                    print("Error getting steps: \(error)")
+                    print("Error getting fitness data: \(error)")
                     return
                 }
                 
-                self.currentSteps = steps
-                self.checkNotificationNeeded(steps: steps)
+                self.currentFitnessData = data
+                self.checkNotificationNeeded(data: data)
             }
         }
     }
     
-    private func checkNotificationNeeded(steps: Int) {
+    private func checkNotificationNeeded(data: DailyFitnessData) {
         let now = Date()
         let minimumInterval = settings.notificationFrequency * 60 // Convert minutes to seconds
         let timeSinceLastNotification = now.timeIntervalSince(lastNotificationTime)
         
         guard timeSinceLastNotification >= minimumInterval else {
-            return // Silently return - no need to log every 10 seconds
+            return // Silently return - no need to log every check
         }
         
         // Only log when we're actually considering sending a notification
@@ -188,8 +186,30 @@ class StepKingViewModel: ObservableObject {
             """)
         
         // If enough time has passed, analyze progress and maybe send notification
-        analyzeProgress(steps: steps)
+        analyzeProgress(data: data)
         lastNotificationTime = now
+    }
+    
+    // Helper methods to get progress for specific metrics
+    func getProgressStatus(for type: FitnessMetricType) -> ProgressStatus {
+        return currentFitnessData.getProgressStatus(for: type, settings: settings)
+    }
+    
+    func getCurrentValue(for type: FitnessMetricType) -> Double {
+        return currentFitnessData.getValue(for: type)
+    }
+    
+    func getTarget(for type: FitnessMetricType) -> Double {
+        switch type {
+        case .weight:
+            return settings.goalWeight
+        case .calories:
+            return Double(settings.maxDailyCalories)
+        case .carbs:
+            return Double(settings.maxDailyCarbs)
+        case .protein:
+            return Double(settings.targetProtein)
+        }
     }
     
     deinit {

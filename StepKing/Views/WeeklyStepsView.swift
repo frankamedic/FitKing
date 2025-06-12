@@ -1,29 +1,45 @@
 import SwiftUI
 
-struct WeeklyStepsView: View {
-    @ObservedObject var mainViewModel: StepKingViewModel
-    @StateObject private var weeklyViewModel = WeeklyStepsViewModel()
+struct WeeklyFitnessView: View {
+    @ObservedObject var mainViewModel: FitKingViewModel
+    @StateObject private var weeklyViewModel = WeeklyFitnessViewModel()
     
     var body: some View {
         NavigationView {
-                    VStack {
-            if weeklyViewModel.isLoading {
-                WeeklyLoadingView()
-            } else if let error = weeklyViewModel.error {
-                WeeklyErrorView(message: error) {
-                    weeklyViewModel.refreshData(goalSteps: mainViewModel.settings.dailyStepGoal)
+            VStack {
+                // Metric selector
+                Picker("Fitness Metric", selection: $weeklyViewModel.selectedMetric) {
+                    ForEach(FitnessMetricType.allCases, id: \.self) { metric in
+                        HStack {
+                            Image(systemName: metric.icon)
+                            Text(metric.rawValue)
+                        }
+                        .tag(metric)
+                    }
                 }
-            } else {
-                WeeklyDataList(weeklyData: weeklyViewModel.weeklyData)
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+                
+                if weeklyViewModel.isLoading {
+                    WeeklyLoadingView()
+                } else if let error = weeklyViewModel.error {
+                    WeeklyErrorView(message: error) {
+                        weeklyViewModel.refreshData(for: weeklyViewModel.selectedMetric, settings: mainViewModel.settings)
+                    }
+                } else {
+                    WeeklyDataList(weeklyData: weeklyViewModel.weeklyData)
+                }
             }
-        }
-            .navigationTitle("Weekly Steps")
+            .navigationTitle("Weekly Fitness")
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
-                weeklyViewModel.loadWeeklyData(goalSteps: mainViewModel.settings.dailyStepGoal)
+                weeklyViewModel.loadWeeklyData(for: weeklyViewModel.selectedMetric, settings: mainViewModel.settings)
+            }
+            .onChange(of: weeklyViewModel.selectedMetric) { oldMetric, newMetric in
+                weeklyViewModel.loadWeeklyData(for: newMetric, settings: mainViewModel.settings)
             }
             .refreshable {
-                weeklyViewModel.refreshData(goalSteps: mainViewModel.settings.dailyStepGoal)
+                weeklyViewModel.refreshData(for: weeklyViewModel.selectedMetric, settings: mainViewModel.settings)
             }
         }
     }
@@ -72,13 +88,13 @@ private struct WeeklyErrorView: View {
 }
 
 private struct WeeklyDataList: View {
-    let weeklyData: [WeeklyStepData]
+    let weeklyData: [WeeklyFitnessData]
     
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(weeklyData) { week in
-                    WeeklyStepCard(weekData: week)
+                    WeeklyFitnessCard(weekData: week)
                 }
             }
             .padding()
@@ -86,8 +102,8 @@ private struct WeeklyDataList: View {
     }
 }
 
-private struct WeeklyStepCard: View {
-    let weekData: WeeklyStepData
+private struct WeeklyFitnessCard: View {
+    let weekData: WeeklyFitnessData
     @Environment(\.colorScheme) var colorScheme
     
     private var cardBackgroundColor: Color {
@@ -108,15 +124,17 @@ private struct WeeklyStepCard: View {
     }
     
     private var progressIcon: String {
-        let percentage = weekData.progressPercentage
-        if percentage >= 1.0 {
+        if weekData.isSuccessful {
             return "checkmark.circle.fill"
-        } else if percentage >= 0.8 {
-            return "checkmark.circle"
-        } else if percentage >= 0.6 {
-            return "minus.circle"
         } else {
-            return "xmark.circle"
+            let percentage = weekData.progressPercentage
+            if percentage >= 0.8 {
+                return "checkmark.circle"
+            } else if percentage >= 0.6 {
+                return "minus.circle"
+            } else {
+                return "xmark.circle"
+            }
         }
     }
     
@@ -136,9 +154,15 @@ private struct WeeklyStepCard: View {
                 
                 Spacer()
                 
-                Image(systemName: progressIcon)
-                    .foregroundColor(progressColor)
-                    .font(.title2)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Image(systemName: weekData.type.icon)
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    
+                    Image(systemName: progressIcon)
+                        .foregroundColor(progressColor)
+                        .font(.title2)
+                }
             }
             
             // Progress bar
@@ -150,7 +174,7 @@ private struct WeeklyStepCard: View {
                     
                     Spacer()
                     
-                    Text("\(Int(weekData.progressPercentage * 100))%")
+                    Text(weekData.isSuccessful ? "Success" : "Needs Work")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(progressColor)
@@ -175,14 +199,14 @@ private struct WeeklyStepCard: View {
                 .frame(height: 8)
             }
             
-            // Step details
+            // Fitness details
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Daily Average")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Text("\(weekData.dailyAverage)")
+                    Text(weekData.formattedValue)
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(progressColor)
@@ -191,11 +215,11 @@ private struct WeeklyStepCard: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("Goal")
+                    Text("Target")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Text("\(weekData.goalSteps)")
+                    Text(weekData.formattedTarget)
                         .font(.title2)
                         .fontWeight(.medium)
                 }
@@ -210,6 +234,24 @@ private struct WeeklyStepCard: View {
                     Text("\(weekData.daysWithData)")
                         .font(.title2)
                         .fontWeight(.medium)
+                }
+            }
+            
+            // Weight-specific info
+            if weekData.type == .weight, let prevWeight = weekData.previousWeekAverage {
+                let change = weekData.dailyAverage - prevWeight
+                let changeText = change >= 0 ? "+\(String(format: "%.1f", change))" : "\(String(format: "%.1f", change))"
+                
+                HStack {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                    
+                    Text("Change from last week: \(changeText) kg")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    
+                    Spacer()
                 }
             }
             
@@ -236,6 +278,6 @@ private struct WeeklyStepCard: View {
 }
 
 #Preview {
-    let viewModel = StepKingViewModel()
-    WeeklyStepsView(mainViewModel: viewModel)
+    let viewModel = FitKingViewModel()
+    WeeklyFitnessView(mainViewModel: viewModel)
 } 

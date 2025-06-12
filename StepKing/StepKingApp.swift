@@ -1,6 +1,6 @@
 //
-//  StepKingApp.swift
-//  StepKing
+//  FitKingApp.swift
+//  FitKing
 //
 //  Created by Frank Sloan on 11/13/24.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import BackgroundTasks
 
 @main
-struct StepKingApp: App {
+struct FitKingApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Environment(\.scenePhase) var scenePhase
     
@@ -47,7 +47,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Start HealthKit observer with proper error handling
         HealthKitManager.shared.requestAuthorization { success, error in
             if success {
-                HealthKitManager.shared.startStepObserver {
+                HealthKitManager.shared.startFitnessObserver {
                     // Handle completion if needed
                 }
             } else if let error = error {

@@ -3,13 +3,19 @@ import Foundation
 struct TrackingSettings: Codable {
     var startTime: Date
     var endTime: Date
-    var dailyStepGoal: Int
+    var maxDailyCalories: Int
+    var maxDailyCarbs: Int
+    var targetProtein: Int
+    var goalWeight: Double
     var notificationFrequency: TimeInterval // in minutes
     
     static let `default` = TrackingSettings(
         startTime: Calendar.current.date(from: DateComponents(hour: 8, minute: 0)) ?? Date(),
         endTime: Calendar.current.date(from: DateComponents(hour: 22, minute: 0)) ?? Date(),
-        dailyStepGoal: 10000,
+        maxDailyCalories: 2000,
+        maxDailyCarbs: 250,
+        targetProtein: 150,
+        goalWeight: 70.0,
         notificationFrequency: 60
     )
     
@@ -98,7 +104,7 @@ struct TrackingSettings: Codable {
 
 // Extension for UserDefaults persistence
 extension TrackingSettings {
-    private static let settingsKey = "com.stepking.settings"
+    private static let settingsKey = "com.fitking.settings"
     
     static func load() -> TrackingSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
