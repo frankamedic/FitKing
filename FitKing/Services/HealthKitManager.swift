@@ -633,6 +633,110 @@ class HealthKitManager {
         WidgetCenter.shared.reloadAllTimelines()
     }
     
+    // Gets daily data for this week for a specific metric
+    func getThisWeekDailyData(for metric: FitnessMetricType, settings: TrackingSettings, completion: @escaping ([DailyMetricData], Error?) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Get the current week's date interval
+        guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) else {
+            completion([], nil)
+            return
+        }
+        
+        var dailyData: [DailyMetricData] = []
+        let dispatchGroup = DispatchGroup()
+        
+        // Generate all 7 days of the week
+        for dayOffset in 0..<7 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: weekInterval.start) else {
+                continue
+            }
+            
+            dispatchGroup.enter()
+            getDailyValue(for: metric, date: day, settings: settings) { value, error in
+                // Calculate target inline to avoid method signature confusion
+                let target: Double
+                switch metric {
+                case .weight:
+                    target = settings.goalWeight
+                case .calories:
+                    target = Double(settings.maxDailyCalories)
+                case .carbs:
+                    target = Double(settings.maxDailyCarbs)
+                case .protein:
+                    target = Double(settings.targetProtein)
+                }
+                
+                let dayData = DailyMetricData(
+                    date: day,
+                    value: value,
+                    target: target,
+                    metric: metric
+                )
+                dailyData.append(dayData)
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .main) {
+            let sortedData = dailyData.sorted { $0.date < $1.date }
+            completion(sortedData, nil)
+        }
+    }
+    
+    // Gets daily value for a specific metric and date
+    private func getDailyValue(for metric: FitnessMetricType, date: Date, settings: TrackingSettings, completion: @escaping (Double, Error?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        switch metric {
+        case .weight:
+            getWeeklyWeightAverage(startDate: startOfDay, endDate: endOfDay) { weight, count, error in
+                completion(weight, error)
+            }
+        case .calories:
+            getDailyNutrition(for: .dietaryEnergyConsumed, unit: .kilocalorie(), from: startOfDay, to: endOfDay) { value, error in
+                completion(value, error)
+            }
+        case .carbs:
+            getDailyNutrition(for: .dietaryCarbohydrates, unit: .gram(), from: startOfDay, to: endOfDay) { value, error in
+                completion(value, error)
+            }
+        case .protein:
+            getDailyNutrition(for: .dietaryProtein, unit: .gram(), from: startOfDay, to: endOfDay) { value, error in
+                completion(value, error)
+            }
+        }
+    }
+    
+    // Gets daily nutrition value for a specific identifier and date range
+    private func getDailyNutrition(for identifier: HKQuantityTypeIdentifier, unit: HKUnit, from startDate: Date, to endDate: Date, completion: @escaping (Double, Error?) -> Void) {
+        guard let nutritionType = HKQuantityType.quantityType(forIdentifier: identifier) else {
+            completion(0, nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        
+        let query = HKStatisticsQuery(
+            quantityType: nutritionType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum
+        ) { query, result, error in
+            if let error = error {
+                completion(0, error)
+                return
+            }
+            
+            let value = result?.sumQuantity()?.doubleValue(for: unit) ?? 0
+            completion(value, nil)
+        }
+        
+        healthStore.execute(query)
+    }
+    
     // Gets average weight loss per week over the last 4 weeks
     // Returns positive number for weight loss, negative for weight gain
     func getAverageWeightLossPerWeek(completion: @escaping (Double, Error?) -> Void) {

@@ -102,4 +102,44 @@ struct ProgressStatus {
             return "red"
         }
     }
+}
+
+// Represents a single day's data for a specific metric
+struct DailyMetricData: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+    let target: Double
+    let metric: FitnessMetricType
+    
+    var dayOfWeek: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E" // Mon, Tue, etc.
+        return formatter.string(from: date)
+    }
+    
+    var isSuccess: Bool {
+        switch metric {
+        case .weight:
+            return abs(value - target) <= 1.0 // Within 1kg of target
+        case .calories, .carbs:
+            return value <= target // Under or at limit
+        case .protein:
+            return value >= target // At or above target
+        }
+    }
+    
+    var percentage: Double {
+        guard target > 0 else { return 0 }
+        
+        switch metric {
+        case .weight:
+            let distance = abs(value - target)
+            return distance > 0 ? min(1.0, 1.0 / distance) : 1.0
+        case .calories, .carbs:
+            return min(1.0, value / target)
+        case .protein:
+            return min(1.0, value / target)
+        }
+    }
 } 

@@ -130,14 +130,14 @@ private struct WeeklyFitnessCard: View {
                 return "xmark.circle.fill"
             }
             
-            // For other metrics, use percentage-based icons
-            let percentage = weekData.progressPercentage
-            if percentage >= 0.8 {
-                return "checkmark.circle"
-            } else if percentage >= 0.6 {
-                return "minus.circle"
-            } else {
-                return "xmark.circle"
+            // For other metrics, use color-matched icons
+            switch weekData.progressColor {
+            case "orange":
+                return "minus.circle.fill" // Mild concern - minus sign
+            case "red":
+                return "xmark.circle.fill" // Major concern - X mark
+            default:
+                return "xmark.circle.fill"
             }
         }
     }

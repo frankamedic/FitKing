@@ -10,13 +10,17 @@ extension Double {
     }
 }
 
-// Main today view that shows:
-// - Top row: Visually appealing nutrition cards with progress rings
+// Main this week view that shows:
+// - Top row: Weekly nutrition progress with daily breakdowns
 // - Bottom: Engaging weight section with trend visualization
 struct ProgressView: View {
     @ObservedObject var viewModel: FitKingViewModel
     @Binding var selectedTab: Int
     @Binding var selectedMetric: FitnessMetricType
+    @State private var caloriesWeekData: [DailyMetricData] = []
+    @State private var carbsWeekData: [DailyMetricData] = []
+    @State private var proteinWeekData: [DailyMetricData] = []
+    @State private var isLoadingWeekData = true
     
     var body: some View {
         ScrollView {
@@ -26,15 +30,24 @@ struct ProgressView: View {
                 } else {
                     // Header section
                     HeaderSection(viewModel: viewModel)
+                        .padding(.horizontal, 16)
                     
-                    // Top row: Nutrition cards with progress rings
-                    NutritionMetricsRow(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
+                    // Top row: Weekly nutrition cards with daily breakdowns
+                    WeeklyNutritionMetricsRow(
+                        caloriesData: caloriesWeekData,
+                        carbsData: carbsWeekData,
+                        proteinData: proteinWeekData,
+                        isLoading: isLoadingWeekData,
+                        selectedTab: $selectedTab,
+                        selectedMetric: $selectedMetric
+                    )
                     
                     // Bottom: Engaging weight section
                     WeightDetailSection(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
+                        .padding(.horizontal, 16)
                 }
             }
-            .padding()
+            .padding(.vertical, 16)
         }
         .background(
             LinearGradient(
@@ -44,6 +57,44 @@ struct ProgressView: View {
             )
             .ignoresSafeArea()
         )
+        .onAppear {
+            loadWeeklyData()
+        }
+    }
+    
+    private func loadWeeklyData() {
+        let dispatchGroup = DispatchGroup()
+        
+        // Load calories week data
+        dispatchGroup.enter()
+        HealthKitManager.shared.getThisWeekDailyData(for: .calories, settings: viewModel.settings) { data, error in
+            DispatchQueue.main.async {
+                self.caloriesWeekData = data
+                dispatchGroup.leave()
+            }
+        }
+        
+        // Load carbs week data
+        dispatchGroup.enter()
+        HealthKitManager.shared.getThisWeekDailyData(for: .carbs, settings: viewModel.settings) { data, error in
+            DispatchQueue.main.async {
+                self.carbsWeekData = data
+                dispatchGroup.leave()
+            }
+        }
+        
+        // Load protein week data
+        dispatchGroup.enter()
+        HealthKitManager.shared.getThisWeekDailyData(for: .protein, settings: viewModel.settings) { data, error in
+            DispatchQueue.main.async {
+                self.proteinWeekData = data
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .main) {
+            self.isLoadingWeekData = false
+        }
     }
 }
 
@@ -80,7 +131,7 @@ private struct HeaderSection: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            Text("Today")
+            Text("This Week")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundStyle(
@@ -96,158 +147,274 @@ private struct HeaderSection: View {
     }
 }
 
-// Enhanced nutrition cards with progress rings
-private struct NutritionMetricsRow: View {
-    @ObservedObject var viewModel: FitKingViewModel
+// Weekly nutrition cards with daily breakdowns
+private struct WeeklyNutritionMetricsRow: View {
+    let caloriesData: [DailyMetricData]
+    let carbsData: [DailyMetricData]
+    let proteinData: [DailyMetricData]
+    let isLoading: Bool
     @Binding var selectedTab: Int
     @Binding var selectedMetric: FitnessMetricType
     
-    let nutritionMetrics: [FitnessMetricType] = [.calories, .carbs, .protein]
-    
     var body: some View {
-        HStack(spacing: 16) {
-            ForEach(nutritionMetrics, id: \.self) { metric in
-                EnhancedNutritionCard(
-                    metric: metric,
-                    current: viewModel.getCurrentValue(for: metric),
-                    target: viewModel.getTarget(for: metric),
-                    status: viewModel.getProgressStatus(for: metric),
-                    settings: viewModel.settings,
-                    selectedTab: $selectedTab,
-                    selectedMetric: $selectedMetric
-                )
-            }
+        HStack(spacing: 12) {
+            WeeklyNutritionCard(
+                metric: .calories,
+                weekData: caloriesData,
+                isLoading: isLoading,
+                selectedTab: $selectedTab,
+                selectedMetric: $selectedMetric
+            )
+            
+            WeeklyNutritionCard(
+                metric: .carbs,
+                weekData: carbsData,
+                isLoading: isLoading,
+                selectedTab: $selectedTab,
+                selectedMetric: $selectedMetric
+            )
+            
+            WeeklyNutritionCard(
+                metric: .protein,
+                weekData: proteinData,
+                isLoading: isLoading,
+                selectedTab: $selectedTab,
+                selectedMetric: $selectedMetric
+            )
         }
+        .padding(.horizontal, 16)
     }
 }
 
-// Visually appealing nutrition card with progress ring
-private struct EnhancedNutritionCard: View {
+// Weekly nutrition card showing daily progress bars
+private struct WeeklyNutritionCard: View {
     let metric: FitnessMetricType
-    let current: Double
-    let target: Double
-    let status: ProgressStatus
-    let settings: TrackingSettings
+    let weekData: [DailyMetricData]
+    let isLoading: Bool
     @Binding var selectedTab: Int
     @Binding var selectedMetric: FitnessMetricType
     
-    private var progressPercentage: Double {
+    private var weeklyAverage: Double {
+        guard !weekData.isEmpty else { return 0 }
+        let validDays = weekData.filter { $0.value > 0 }
+        guard !validDays.isEmpty else { return 0 }
+        return validDays.reduce(0) { $0 + $1.value } / Double(validDays.count)
+    }
+    
+    private var weeklyTarget: Double {
+        guard let firstDay = weekData.first else { return 0 }
+        return firstDay.target
+    }
+    
+    private var isWeekOnTrack: Bool {
         switch metric {
         case .calories, .carbs:
-            return min(current / target, 1.5) // Cap at 150% for visual purposes
+            return weeklyAverage <= weeklyTarget
         case .protein:
-            return min(current / target, 1.5)
+            return weeklyAverage >= weeklyTarget
         case .weight:
-            return 0
+            return true
         }
     }
     
     private var cardGradient: LinearGradient {
-        switch metric {
-        case .calories:
-            return LinearGradient(
-                colors: status.isSuccess ? [.green.opacity(0.8), .mint.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .carbs:
-            return LinearGradient(
-                colors: status.isSuccess ? [.green.opacity(0.8), .yellow.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .protein:
-            return LinearGradient(
-                colors: status.isSuccess ? [.blue.opacity(0.8), .purple.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .weight:
-            return LinearGradient(colors: [.clear], startPoint: .top, endPoint: .bottom)
+        let baseColor: Color
+        
+        // Determine severity level for card color
+        if isWeekOnTrack {
+            baseColor = .green // Success
+        } else {
+            // Check if significantly over target (>20% over for calories/carbs, >20% under for protein)
+            let overagePercentage = switch metric {
+            case .calories, .carbs:
+                (weeklyAverage - weeklyTarget) / weeklyTarget
+            case .protein:
+                (weeklyTarget - weeklyAverage) / weeklyTarget
+            case .weight:
+                0.0
+            }
+            
+            baseColor = overagePercentage > 0.2 ? .red : .orange // Red if significantly off, orange if mildly off
+        }
+        
+        // Much more subdued background - darker with subtle color hint
+        return LinearGradient(
+            colors: [
+                Color(.systemGray5).opacity(0.9),
+                baseColor.opacity(0.15)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    // Color for the average value text based on status
+    private var averageTextColor: Color {
+        if isWeekOnTrack {
+            return .green.opacity(0.9)
+        } else {
+            let overagePercentage = switch metric {
+            case .calories, .carbs:
+                (weeklyAverage - weeklyTarget) / weeklyTarget
+            case .protein:
+                (weeklyTarget - weeklyAverage) / weeklyTarget
+            case .weight:
+                0.0
+            }
+            
+            return overagePercentage > 0.2 ? .red.opacity(0.9) : .orange.opacity(0.9)
         }
     }
     
-    private var formattedCurrent: String {
+    private var formattedAverage: String {
         switch metric {
         case .calories:
-            return "\(Int(current))"
+            return "\(Int(weeklyAverage))"
         case .carbs, .protein:
-            return "\(Int(current))g"
+            return "\(Int(weeklyAverage))g"
         case .weight:
             return ""
         }
     }
     
-    private var progressText: String {
+    private var statusText: String {
         switch metric {
         case .calories, .carbs:
-            if current <= target {
-                let remaining = target - current
-                let percentage = (remaining / target * 100).rounded(to: 0)
-                return "\(Int(percentage))% left"
+            if weeklyAverage <= weeklyTarget {
+                return "On track!"
             } else {
-                let over = current - target
-                let percentage = (over / target * 100).rounded(to: 0)
-                return "\(Int(percentage))% over"
+                let over = ((weeklyAverage - weeklyTarget) / weeklyTarget * 100).rounded(to: 0)
+                return "\(Int(over))% over"
             }
         case .protein:
-            if current >= target {
-                let over = current - target
-                let percentage = (over / target * 100).rounded(to: 0)
-                return "\(Int(percentage))% over"
+            if weeklyAverage >= weeklyTarget {
+                return "Target met!"
             } else {
-                let remaining = target - current
-                let percentage = (remaining / target * 100).rounded(to: 0)
-                return "\(Int(percentage))% left"
+                let under = ((weeklyTarget - weeklyAverage) / weeklyTarget * 100).rounded(to: 0)
+                return "\(Int(under))% under"
             }
         case .weight:
             return ""
+        }
+    }
+    
+    // Calculate bar height based on value relative to target
+    private func getBarHeight(for day: DailyMetricData) -> CGFloat {
+        guard day.target > 0 else { return 4 }
+        
+        let ratio = day.value / day.target
+        let minHeight: CGFloat = 4
+        let maxHeight: CGFloat = 32
+        
+        // Scale height based on ratio, with some minimum visibility
+        let height = minHeight + (ratio * (maxHeight - minHeight))
+        return min(maxHeight, max(minHeight, height))
+    }
+    
+    // Get bar color based on success/failure and severity (3-color system)
+    private func getBarColor(for day: DailyMetricData) -> Color {
+        if day.value == 0 {
+            return Color.white.opacity(0.3) // No data - subtle white
+        }
+        
+        switch metric {
+        case .calories, .carbs:
+            // Success = under or at target
+            if day.value <= day.target {
+                return Color.green.opacity(0.9) // Success - green
+            } else if day.value <= day.target * 1.2 {
+                return Color.orange.opacity(0.9) // Mildly over (1-20% over) - orange
+            } else {
+                return Color.red.opacity(0.9) // Significantly over (>20% over) - red
+            }
+        case .protein:
+            // Success = at or above target
+            if day.value >= day.target {
+                return Color.green.opacity(0.9) // Success - green
+            } else if day.value >= day.target * 0.8 {
+                return Color.orange.opacity(0.9) // Close to target (80-99%) - orange
+            } else {
+                return Color.red.opacity(0.9) // Significantly under (<80%) - red
+            }
+        case .weight:
+            return Color.green.opacity(0.9)
         }
     }
     
     var body: some View {
         VStack(spacing: 12) {
-            // Progress ring with icon
-            ZStack {
-                // Background ring
-                Circle()
-                    .stroke(Color.white.opacity(0.3), lineWidth: 6)
-                    .frame(width: 60, height: 60)
+            if isLoading {
+                // Loading state
+                VStack(spacing: 8) {
+                    Image(systemName: metric.icon)
+                        .font(.title2)
+                        .foregroundColor(.white)
+                    
+                    SwiftUI.ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                    
+                    Text("Loading...")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            } else {
+                // Header with icon and metric name
+                HStack {
+                    Image(systemName: metric.icon)
+                        .font(.title3)
+                        .foregroundColor(.white)
+                        .fontWeight(.semibold)
+                    
+                    Text(metric.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.9))
+                        .fontWeight(.medium)
+                }
                 
-                // Progress ring
-                Circle()
-                    .trim(from: 0, to: min(progressPercentage, 1.0))
-                    .stroke(
-                        Color.white,
-                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                    )
-                    .frame(width: 60, height: 60)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 1.0), value: progressPercentage)
+                // Weekly average
+                VStack(spacing: 2) {
+                    Text("Avg/Day")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    Text(formattedAverage)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(averageTextColor)
+                    
+                    Text(statusText)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.8))
+                        .fontWeight(.medium)
+                }
                 
-                // Icon
-                Image(systemName: metric.icon)
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .fontWeight(.semibold)
-            }
-            
-            // Metric info
-            VStack(spacing: 4) {
-                Text(metric.rawValue)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.9))
-                    .fontWeight(.medium)
-                
-                Text(formattedCurrent)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Text(progressText)
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.8))
-                    .fontWeight(.medium)
+                // Daily progress bars for the week
+                VStack(spacing: 6) {
+                    // Progress bars with variable heights
+                    HStack(alignment: .bottom, spacing: 3) {
+                        ForEach(weekData.indices, id: \.self) { index in
+                            if index < weekData.count {
+                                let day = weekData[index]
+                                let barHeight = getBarHeight(for: day)
+                                let barColor = getBarColor(for: day)
+                                
+                                VStack(spacing: 2) {
+                                    Rectangle()
+                                        .fill(barColor)
+                                        .frame(width: 12, height: barHeight)
+                                        .cornerRadius(2)
+                                    
+                                    Text(day.dayOfWeek.prefix(1))
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .frame(width: 12)
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 40) // Fixed container height for bars
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -266,7 +433,6 @@ private struct EnhancedNutritionCard: View {
             selectedMetric = metric
             selectedTab = 1
         }
-        .scaleEffect(1.0)
         .animation(.easeInOut(duration: 0.1), value: selectedTab)
     }
 }

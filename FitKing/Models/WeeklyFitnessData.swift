@@ -96,14 +96,23 @@ struct WeeklyFitnessData: Identifiable {
                 return "red"
             }
             
-            // For other metrics, use percentage-based coloring
-            let percentage = progressPercentage
-            if percentage >= 0.8 {
-                return "yellow"
-            } else if percentage >= 0.6 {
-                return "orange"
+            // For other metrics, use 3-color system matching "This Week" view
+            let overagePercentage = switch type {
+            case .calories, .carbs:
+                // How much over the limit they are
+                max(0, (dailyAverage - target) / target)
+            case .protein:
+                // How much under the target they are
+                max(0, (target - dailyAverage) / target)
+            case .weight:
+                0.0
+            }
+            
+            // Use severity-based coloring
+            if overagePercentage <= 0.2 {
+                return "orange" // Mildly over/under target (0-20%)
             } else {
-                return "red"
+                return "red" // Significantly over/under target (>20%)
             }
         }
     }
