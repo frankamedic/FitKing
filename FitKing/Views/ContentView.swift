@@ -5,24 +5,29 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showToast = false
     @State private var toastMessage: String?
+    @State private var selectedTab = 0
+    @State private var selectedMetric: FitnessMetricType = .weight
     
     var body: some View {
         ZStack {
-            TabView {
-                ProgressView(viewModel: viewModel)
+            TabView(selection: $selectedTab) {
+                ProgressView(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
                     .tabItem {
-                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                        Label("Today", systemImage: "chart.line.uptrend.xyaxis")
                     }
+                    .tag(0)
                 
-                WeeklyFitnessView(mainViewModel: viewModel)
+                WeeklyFitnessView(mainViewModel: viewModel, selectedMetric: $selectedMetric)
                     .tabItem {
                         Label("Weekly", systemImage: "calendar")
                     }
+                    .tag(1)
                 
                 SettingsView(viewModel: viewModel)
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
+                    .tag(2)
             }
             .onAppear {
                 setupHealthKit()

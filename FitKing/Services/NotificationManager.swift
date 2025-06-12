@@ -64,77 +64,7 @@ class NotificationManager {
         }
     }
     
-    // Creates the content for a step progress notification by:
-    // - Calculating how many steps are still needed
-    // - Determining how much time is left today
-    // - Computing the required pace (steps per hour)
-    // - Checking if user is behind expected progress
-    // Returns: Title and body text for notification, or nil if no notification needed
-    func createStepProgressNotification(currentSteps: Int, goalSteps: Int, endTime: Date) -> (title: String, body: String)? {
-        print("📝 Creating step progress notification...")
-        let stepsNeeded = goalSteps - currentSteps
-        print("- Steps needed: \(stepsNeeded)")
-        
-        guard stepsNeeded > 0 else {
-            print("⚠️ No notification needed - already reached goal")
-            return nil
-        }
-        
-        let hoursRemaining = Date().distance(to: endTime) / 3600
-        print("- Hours remaining: \(hoursRemaining)")
-        
-        guard hoursRemaining > 0 else {
-            print("⚠️ No notification needed - past end time")
-            return nil
-        }
-        
-        let stepsPerHour = Int(ceil(Double(stepsNeeded) / hoursRemaining))
-        print("- Required pace: \(stepsPerHour) steps/hour")
-        
-        // Calculate expected progress based on time of day
-        let settings = TrackingSettings.load()
-        let expectedProgress = settings.expectedProgress()
-        let expectedSteps = Int(Double(goalSteps) * expectedProgress)
-        print("""
-            Progress Check:
-            - Expected progress: \(expectedProgress * 100)%
-            - Expected steps: \(expectedSteps)
-            - Current steps: \(currentSteps)
-            """)
-        
-        let percentComplete = (Double(currentSteps) / Double(goalSteps) * 100).rounded(to: 1)
-        let expectedPercent = (expectedProgress * 100).rounded(to: 1)
-        let percentBehind = (expectedPercent - percentComplete).rounded(to: 1)
-        
-        // Only create notification if meaningfully behind expected pace (1% or more)
-        guard currentSteps < expectedSteps && percentBehind >= 1.0 else {
-            print("⚠️ No notification needed - ahead of pace or less than 1% behind")
-            return nil
-        }
-        
-        // Format end time
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        let formattedEndTime = formatter.string(from: endTime)
-        
-        // Add more context to the notification
-        let numberFormatter = NumberFormatter()
-        numberFormatter.numberStyle = .decimal
-        
-        let formattedCurrentSteps = numberFormatter.string(from: NSNumber(value: currentSteps)) ?? "\(currentSteps)"
-        let formattedGoalSteps = numberFormatter.string(from: NSNumber(value: goalSteps)) ?? "\(goalSteps)"
-        let formattedPaceSteps = numberFormatter.string(from: NSNumber(value: stepsPerHour)) ?? "\(stepsPerHour)"
-        
-        print("✅ Creating notification content")
-        return (
-            title: String(format: "You're %.1f%% behind - Let's catch up! 💪", percentBehind),
-            body: String(format: """
-                At %.1f%% (%@ of %@ steps)
-                Need %@ steps/hr to reach goal by %@
-                """, percentComplete, formattedCurrentSteps, formattedGoalSteps, formattedPaceSteps, formattedEndTime)
-        )
-    }
+
     
     // Defines where a notification request came from:
     // - healthKitObserver: When HealthKit detects new steps
@@ -153,72 +83,7 @@ class NotificationManager {
     // Helps prevent duplicate notifications from being scheduled
     private var isSchedulingNotification = false
     
-    // Attempts to schedule a step progress notification if:
-    // - Enough time has passed since last notification
-    // - User is behind their expected pace
-    // - App is in background state
-    // - We're within the user's tracking period
-    // Parameters:
-    // - currentSteps: User's current step count
-    // - goalSteps: User's daily step goal
-    // - endTime: When today's tracking period ends
-    // - date: When to show the notification
-    // - source: What triggered this notification request
-    func scheduleStepProgressNotification(
-        currentSteps: Int,
-        goalSteps: Int,
-        endTime: Date,
-        date: Date,
-        source: NotificationSource = .backgroundRefresh
-    ) {
-        // Process notification request on dedicated queue
-        notificationQueue.async { [weak self] in
-            guard let self = self,
-                  !self.isSchedulingNotification else {
-                print("⏳ Already scheduling a notification, skipping...")
-                return
-            }
-            
-            self.isSchedulingNotification = true
-            defer { self.isSchedulingNotification = false }
-            
-            // Validate input parameters
-            guard currentSteps >= 0, 
-                  goalSteps > 0, 
-                  date.timeIntervalSinceNow > -1 else {
-                print("❌ Invalid parameters for notification scheduling:")
-                print("- Current steps: \(currentSteps)")
-                print("- Goal steps: \(goalSteps)") 
-                print("- Schedule date: \(date)")
-                return
-            }
-            
-            let settings = TrackingSettings.load()
-            let notificationInterval = settings.notificationFrequency * 60
-            let timeSinceLastNotification = Date().timeIntervalSince(self.lastNotificationTime)
-            
-            guard timeSinceLastNotification >= notificationInterval else {
-                print("⏳ Too soon since last notification (\(Int(timeSinceLastNotification))s / \(notificationInterval)s)")
-                return
-            }
-            
-            // Try to create notification content
-            guard let (title, body) = self.createStepProgressNotification(
-                currentSteps: currentSteps,
-                goalSteps: goalSteps,
-                endTime: endTime
-            ) else {
-                print("❌ No notification content created - conditions not met")
-                return
-            }
-            
-            // Schedule notification and refresh background tasks
-            DispatchQueue.main.sync {
-                self.scheduleNotification(title: title, body: body, date: date)
-                self.rescheduleBackgroundRefresh()
-            }
-        }
-    }
+
     
     // Creates the content for a fitness progress notification by:
     // - Checking which metrics need attention
@@ -495,7 +360,7 @@ class NotificationManager {
         print("""
             📋 Current Settings:
             - Notification frequency: \(settings.notificationFrequency) minutes
-            - Weight goal: \(settings.goalWeight) kg
+            - Weight goal: \(settings.displayWeight(settings.goalWeight))
             - Max calories: \(settings.maxDailyCalories) cal
             - Max carbs: \(settings.maxDailyCarbs) g
             - Target protein: \(settings.targetProtein) g
@@ -550,7 +415,7 @@ class NotificationManager {
                     
                     print("""
                         📊 Fitness Progress:
-                        - Weight: \(String(format: "%.1f", fitnessData.weight)) kg (target: \(String(format: "%.1f", settings.goalWeight)) kg)
+                        - Weight: \(settings.displayWeight(fitnessData.weight)) (target: \(settings.displayWeight(settings.goalWeight)))
                         - Calories: \(Int(fitnessData.calories)) cal (max: \(settings.maxDailyCalories) cal)
                         - Carbs: \(Int(fitnessData.carbs)) g (max: \(settings.maxDailyCarbs) g)
                         - Protein: \(Int(fitnessData.protein)) g (target: \(settings.targetProtein) g)
@@ -714,7 +579,7 @@ class NotificationManager {
         
         if timeSinceLastNotification >= minimumInterval {
             print("📲 Checking for notification after app became inactive...")
-            HealthKitManager.shared.getTodaySteps { [weak self] steps, error in
+            HealthKitManager.shared.getTodayFitnessData { [weak self] fitnessData, error in
                 guard let self = self else { return }
                 
                 if let error = error {
@@ -722,12 +587,10 @@ class NotificationManager {
                     return
                 }
                 
-                self.scheduleStepProgressNotification(
-                    currentSteps: steps,
-                    goalSteps: settings.dailyStepGoal,
-                    endTime: settings.todayEndTime,
-                    date: Date(),
-                    source: .backgroundRefresh
+                self.scheduleFitnessProgressNotification(
+                    fitnessData: fitnessData,
+                    settings: settings,
+                    date: Date()
                 )
             }
         }

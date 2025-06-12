@@ -42,11 +42,42 @@ struct WeeklyFitnessData: Identifiable {
     var isSuccessful: Bool {
         switch type {
         case .weight:
-            // Successful if closer to goal than previous week
             guard let prevAvg = previousWeekAverage else { return false }
+            let settings = TrackingSettings.load()
+            let change = dailyAverage - prevAvg
+            let absChange = abs(change)
             let currentDistance = abs(dailyAverage - target)
             let previousDistance = abs(prevAvg - target)
-            return currentDistance <= previousDistance
+            
+            // Thresholds for determining success
+            let changeThreshold = settings.weightUnit == .kilograms ? 0.5 : 1.0
+            let goalThreshold = settings.weightUnit == .kilograms ? 2.0 : 4.0
+            
+            // If already at goal, success is maintaining (small change)
+            if currentDistance <= goalThreshold {
+                return absChange <= changeThreshold
+            }
+            
+            // Determine if weight is moving in the right direction toward goal
+            let isLosingWeight = change < 0
+            let isGainingWeight = change > 0
+            let shouldLoseWeight = dailyAverage > target
+            let shouldGainWeight = dailyAverage < target
+            
+            // Success if:
+            // 1. Maintained weight (very small change)
+            // 2. Lost weight when should lose weight
+            // 3. Gained weight when should gain weight
+            // 4. Moved closer to goal overall
+            if absChange <= changeThreshold {
+                return true // Maintained weight
+            } else if shouldLoseWeight && isLosingWeight {
+                return true // Lost weight when needed
+            } else if shouldGainWeight && isGainingWeight {
+                return true // Gained weight when needed
+            } else {
+                return currentDistance < previousDistance // At least moved closer to goal
+            }
         case .calories, .carbs:
             // Successful if under the max
             return dailyAverage <= target
@@ -60,6 +91,12 @@ struct WeeklyFitnessData: Identifiable {
         if isSuccessful {
             return "green"
         } else {
+            // For weight, unsuccessful means moving away from goal - always red
+            if type == .weight {
+                return "red"
+            }
+            
+            // For other metrics, use percentage-based coloring
             let percentage = progressPercentage
             if percentage >= 0.8 {
                 return "yellow"
@@ -106,7 +143,8 @@ struct WeeklyFitnessData: Identifiable {
     var formattedValue: String {
         switch type {
         case .weight:
-            return String(format: "%.1f kg", dailyAverage)
+            let settings = TrackingSettings.load()
+            return settings.displayWeight(dailyAverage)
         case .calories:
             return "\(Int(dailyAverage)) cal"
         case .carbs:
@@ -119,13 +157,58 @@ struct WeeklyFitnessData: Identifiable {
     var formattedTarget: String {
         switch type {
         case .weight:
-            return String(format: "%.1f kg", target)
+            let settings = TrackingSettings.load()
+            return settings.displayWeight(target)
         case .calories:
             return "\(Int(target)) cal max"
         case .carbs:
             return "\(Int(target))g max"
         case .protein:
             return "\(Int(target))g target"
+        }
+    }
+    
+    var weightProgressMessage: String? {
+        guard type == .weight, let prevAvg = previousWeekAverage else { return nil }
+        
+        let settings = TrackingSettings.load()
+        let change = dailyAverage - prevAvg
+        let absChange = abs(change)
+        let currentDistance = abs(dailyAverage - target)
+        
+        // Thresholds for determining messages
+        let changeThreshold = settings.weightUnit == .kilograms ? 0.5 : 1.0
+        let goalThreshold = settings.weightUnit == .kilograms ? 2.0 : 4.0
+        
+        // Determine direction needed
+        let shouldLoseWeight = dailyAverage > target
+        let shouldGainWeight = dailyAverage < target
+        
+        if absChange < changeThreshold {
+            // Maintained weight
+            if currentDistance <= goalThreshold {
+                return "Excellent! You're maintaining your weight at your goal!"
+            } else {
+                return "Great work, you maintained your average weight this week!"
+            }
+        } else if change < 0 {
+            // Weight decreased
+            if currentDistance <= goalThreshold {
+                return "Perfect! You reached your goal weight this week!"
+            } else if shouldLoseWeight {
+                return "Great work, your average weight decreased \(settings.displayWeight(absChange)) this week!"
+            } else {
+                return "Your average weight decreased \(settings.displayWeight(absChange)) this week"
+            }
+        } else {
+            // Weight increased
+            if shouldGainWeight && currentDistance <= goalThreshold {
+                return "Perfect! You reached your goal weight this week!"
+            } else if shouldGainWeight {
+                return "Great work, your average weight increased \(settings.displayWeight(absChange)) this week!"
+            } else {
+                return "Your average weight increased \(settings.displayWeight(absChange)) this week"
+            }
         }
     }
 }

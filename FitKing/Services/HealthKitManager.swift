@@ -129,12 +129,15 @@ class HealthKitManager {
         }
     }
     
-    // Gets the latest weight measurement
+    // Gets the latest weight measurement in user's preferred unit
     private func getLatestWeight(completion: @escaping (Double, Error?) -> Void) {
         guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
             completion(0, nil)
             return
         }
+        
+        let settings = TrackingSettings.load()
+        let unit = settings.weightUnit == .kilograms ? HKUnit.gramUnit(with: .kilo) : HKUnit.pound()
         
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
         let query = HKSampleQuery(
@@ -153,7 +156,7 @@ class HealthKitManager {
                 return
             }
             
-            let weight = sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            let weight = sample.quantity.doubleValue(for: unit)
             completion(weight, nil)
         }
         
@@ -230,30 +233,56 @@ class HealthKitManager {
             getWeeklyAverage(for: type, startDate: weekInterval.start, endDate: weekInterval.end) { average, daysWithData, error in
                 if let error = error {
                     errors.append(error)
+                    group.leave()
                 } else {
                     let target = self.getTarget(for: type, settings: settings)
                     
                     // Get previous week average for weight comparison
-                    var previousWeekAverage: Double? = nil
                     if type == .weight && weekOffset < weeks - 1 {
                         if let prevWeekStart = calendar.date(byAdding: .weekOfYear, value: -(weekOffset + 1), to: calendar.startOfDay(for: now)),
                            let prevWeekInterval = calendar.dateInterval(of: .weekOfYear, for: prevWeekStart) {
+                            
+                            // Enter the group again for the previous week fetch
+                            group.enter()
                             self.getWeeklyAverage(for: type, startDate: prevWeekInterval.start, endDate: prevWeekInterval.end) { prevAverage, _, _ in
-                                previousWeekAverage = prevAverage > 0 ? prevAverage : nil
+                                let previousWeekAverage = prevAverage > 0 ? prevAverage : nil
+                                
+                                let weekData = WeeklyFitnessData(
+                                    weekStartDate: weekInterval.start,
+                                    weekEndDate: weekInterval.end,
+                                    type: type,
+                                    dailyAverage: average,
+                                    daysWithData: daysWithData,
+                                    target: target,
+                                    previousWeekAverage: previousWeekAverage
+                                )
+                                weeklyData.append(weekData)
+                                group.leave()
                             }
+                        } else {
+                            let weekData = WeeklyFitnessData(
+                                weekStartDate: weekInterval.start,
+                                weekEndDate: weekInterval.end,
+                                type: type,
+                                dailyAverage: average,
+                                daysWithData: daysWithData,
+                                target: target,
+                                previousWeekAverage: nil
+                            )
+                            weeklyData.append(weekData)
                         }
+                    } else {
+                        let weekData = WeeklyFitnessData(
+                            weekStartDate: weekInterval.start,
+                            weekEndDate: weekInterval.end,
+                            type: type,
+                            dailyAverage: average,
+                            daysWithData: daysWithData,
+                            target: target,
+                            previousWeekAverage: nil
+                        )
+                        weeklyData.append(weekData)
                     }
-                    
-                    let weekData = WeeklyFitnessData(
-                        weekStartDate: weekInterval.start,
-                        weekEndDate: weekInterval.end,
-                        type: type,
-                        dailyAverage: average,
-                        daysWithData: daysWithData,
-                        target: target,
-                        previousWeekAverage: previousWeekAverage
-                    )
-                    weeklyData.append(weekData)
                 }
                 group.leave()
             }
@@ -279,12 +308,15 @@ class HealthKitManager {
         }
     }
     
-    // Gets weekly weight average
+    // Gets weekly weight average in user's preferred unit
     private func getWeeklyWeightAverage(startDate: Date, endDate: Date, completion: @escaping (Double, Int, Error?) -> Void) {
         guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
             completion(0, 0, nil)
             return
         }
+        
+        let settings = TrackingSettings.load()
+        let unit = settings.weightUnit == .kilograms ? HKUnit.gramUnit(with: .kilo) : HKUnit.pound()
         
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
         
@@ -305,7 +337,7 @@ class HealthKitManager {
             }
             
             let totalWeight = samples.reduce(0) { total, sample in
-                total + sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+                total + sample.quantity.doubleValue(for: unit)
             }
             
             let average = totalWeight / Double(samples.count)
@@ -599,5 +631,43 @@ class HealthKitManager {
         
         // Reload widget timelines
         WidgetCenter.shared.reloadAllTimelines()
+    }
+    
+    // Gets average weight loss per week over the last 4 weeks
+    // Returns positive number for weight loss, negative for weight gain
+    func getAverageWeightLossPerWeek(completion: @escaping (Double, Error?) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        let settings = TrackingSettings.load()
+        
+        // Get 5 weeks of data to ensure we have previous week data for calculations
+        getWeeklyFitnessData(for: .weight, weeks: 5, settings: settings) { weeklyData, error in
+            if let error = error {
+                completion(0, error)
+                return
+            }
+            
+            guard weeklyData.count >= 2 else {
+                completion(0, nil) // Not enough data
+                return
+            }
+            
+            // Sort by date (oldest first)
+            let sortedData = weeklyData.sorted { $0.weekStartDate < $1.weekStartDate }
+            
+            // Calculate total weight change from first to last week
+            let firstWeek = sortedData.first!
+            let lastWeek = sortedData.last!
+            let totalWeightChange = firstWeek.dailyAverage - lastWeek.dailyAverage // Positive = weight loss
+            
+            // Calculate number of weeks between first and last
+            let weeksBetween = calendar.dateComponents([.weekOfYear], 
+                                                     from: firstWeek.weekStartDate, 
+                                                     to: lastWeek.weekStartDate).weekOfYear ?? 1
+            
+            let averageWeightLossPerWeek = weeksBetween > 0 ? totalWeightChange / Double(weeksBetween) : 0
+            
+            completion(averageWeightLossPerWeek, nil)
+        }
     }
 } 

@@ -20,6 +20,7 @@ class FitKingViewModel: ObservableObject {
     }
     @Published var isTracking: Bool = false
     @Published var error: String? = nil
+    @Published var averageWeightLossPerWeek: Double = 0.0
     
     private var timer: Timer?
     private var updateTimer: Timer?
@@ -47,6 +48,7 @@ class FitKingViewModel: ObservableObject {
             print("Starting fitness tracking")
             self.isTracking = true
             // Observers will handle updates automatically
+            self.updateWeightLossData()
         }
     }
     
@@ -209,6 +211,18 @@ class FitKingViewModel: ObservableObject {
             return Double(settings.maxDailyCarbs)
         case .protein:
             return Double(settings.targetProtein)
+        }
+    }
+    
+    private func updateWeightLossData() {
+        HealthKitManager.shared.getAverageWeightLossPerWeek { [weak self] weightLoss, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error getting weight loss data: \(error)")
+                    return
+                }
+                self?.averageWeightLossPerWeek = weightLoss
+            }
         }
     }
     

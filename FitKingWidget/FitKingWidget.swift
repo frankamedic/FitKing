@@ -2,17 +2,20 @@ import WidgetKit
 import SwiftUI
 
 struct Provider: TimelineProvider {
-    private let groupID = "group.com.sloaninnovation.StepKing"
+    private let groupID = "group.com.sloaninnovation.FitKing"
     private let healthKitManager = HealthKitManager.shared
     
-    func placeholder(in context: Context) -> StepEntry {
-        StepEntry(date: Date(), steps: 0)
+    func placeholder(in context: Context) -> FitnessEntry {
+        FitnessEntry(date: Date(), weight: 0, calories: 0, carbs: 0, protein: 0)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (StepEntry) -> ()) {
+    func getSnapshot(in context: Context, completion: @escaping (FitnessEntry) -> ()) {
         let sharedDefaults = UserDefaults(suiteName: groupID)
-        let steps = sharedDefaults?.integer(forKey: "currentSteps") ?? 0
-        let entry = StepEntry(date: Date(), steps: steps)
+        let weight = sharedDefaults?.double(forKey: "currentWeight") ?? 0
+        let calories = sharedDefaults?.double(forKey: "currentCalories") ?? 0
+        let carbs = sharedDefaults?.double(forKey: "currentCarbs") ?? 0
+        let protein = sharedDefaults?.double(forKey: "currentProtein") ?? 0
+        let entry = FitnessEntry(date: Date(), weight: weight, calories: calories, carbs: carbs, protein: protein)
         completion(entry)
     }
 
@@ -24,88 +27,108 @@ struct Provider: TimelineProvider {
         // Check if within tracking period
         guard settings.isWithinTrackingPeriod() else {
             let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-            let timeline = Timeline(entries: [StepEntry(date: Date(), steps: 0)], policy: .after(nextUpdate))
+            let timeline = Timeline(entries: [FitnessEntry(date: Date(), weight: 0, calories: 0, carbs: 0, protein: 0)], policy: .after(nextUpdate))
             completion(timeline)
             return
         }
         
-        // Get current steps
-        healthKitManager.getTodaySteps { steps, error in
+        // Get current fitness data
+        healthKitManager.getTodayFitnessData { fitnessData, error in
             if let error = error {
-                print("Error getting steps: \(error)")
+                print("Error getting fitness data: \(error)")
                 return
             }
             
-            // Save steps to shared defaults
-            sharedDefaults?.setValue(steps, forKey: "currentSteps")
+            // Save fitness data to shared defaults
+            sharedDefaults?.setValue(fitnessData.weight, forKey: "currentWeight")
+            sharedDefaults?.setValue(fitnessData.calories, forKey: "currentCalories")
+            sharedDefaults?.setValue(fitnessData.carbs, forKey: "currentCarbs")
+            sharedDefaults?.setValue(fitnessData.protein, forKey: "currentProtein")
             
             // Check if notification needed
-            self.checkAndScheduleNotification(steps: steps, settings: settings)
+            self.checkAndScheduleNotification(fitnessData: fitnessData, settings: settings)
             
             // Create timeline entry
-            let entry = StepEntry(date: Date(), steps: steps)
+            let entry = FitnessEntry(
+                date: Date(), 
+                weight: fitnessData.weight,
+                calories: fitnessData.calories,
+                carbs: fitnessData.carbs,
+                protein: fitnessData.protein
+            )
             
-            // Update more frequently when behind pace
-            let updateInterval = self.shouldUpdateMoreFrequently(steps: steps, settings: settings) ? 5 : 15
-            let nextUpdate = Calendar.current.date(byAdding: .minute, value: updateInterval, to: Date())!
+            // Update every 15 minutes
+            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
             
             let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
             completion(timeline)
         }
     }
     
-    private func shouldUpdateMoreFrequently(steps: Int, settings: TrackingSettings) -> Bool {
-        let expectedProgress = settings.expectedProgress()
-        let expectedSteps = Int(Double(settings.dailyStepGoal) * expectedProgress)
-        return steps < expectedSteps
-    }
-    
-    private func checkAndScheduleNotification(steps: Int, settings: TrackingSettings) {
+    private func checkAndScheduleNotification(fitnessData: DailyFitnessData, settings: TrackingSettings) {
         let notificationManager = NotificationManager.shared
-        notificationManager.scheduleStepProgressNotification(
-            currentSteps: steps,
-            goalSteps: settings.dailyStepGoal,
-            endTime: settings.todayEndTime,
+        notificationManager.scheduleFitnessProgressNotification(
+            fitnessData: fitnessData,
+            settings: settings,
             date: Date()
         )
     }
 }
 
-struct StepEntry: TimelineEntry {
+struct FitnessEntry: TimelineEntry {
     let date: Date
-    let steps: Int
+    let weight: Double
+    let calories: Double
+    let carbs: Double
+    let protein: Double
 }
 
-struct StepKingWidgetEntryView : View {
+struct FitKingWidgetEntryView : View {
     var entry: Provider.Entry
     
     var body: some View {
-        VStack {
-            Text("Steps Today")
-                .font(.caption)
+        VStack(spacing: 4) {
+            Text("Fitness Today")
+                .font(.caption2)
                 .foregroundColor(.secondary)
             
-            Text("\(entry.steps)")
-                .font(.title2)
-                .bold()
+            HStack(spacing: 8) {
+                VStack(spacing: 2) {
+                    Text("\(Int(entry.calories))")
+                        .font(.caption)
+                        .bold()
+                    Text("cal")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 2) {
+                    Text("\(Int(entry.protein))")
+                        .font(.caption)
+                        .bold()
+                    Text("protein")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
             
-            Image(systemName: "figure.walk")
+            Image(systemName: "heart.fill")
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(.red)
         }
     }
 }
 
 @main
-struct StepKingWidget: Widget {
-    let kind: String = "StepKingWidget"
+struct FitKingWidget: Widget {
+    let kind: String = "FitKingWidget"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            StepKingWidgetEntryView(entry: entry)
+            FitKingWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Step Counter")
-        .description("Shows your daily step count.")
+        .configurationDisplayName("Fitness Tracker")
+        .description("Shows your daily fitness progress.")
         .supportedFamilies([.systemSmall])
     }
 } 

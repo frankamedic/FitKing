@@ -3,18 +3,16 @@ import SwiftUI
 struct WeeklyFitnessView: View {
     @ObservedObject var mainViewModel: FitKingViewModel
     @StateObject private var weeklyViewModel = WeeklyFitnessViewModel()
+    @Binding var selectedMetric: FitnessMetricType
     
     var body: some View {
         NavigationView {
             VStack {
                 // Metric selector
-                Picker("Fitness Metric", selection: $weeklyViewModel.selectedMetric) {
+                Picker("Fitness Metric", selection: $selectedMetric) {
                     ForEach(FitnessMetricType.allCases, id: \.self) { metric in
-                        HStack {
-                            Image(systemName: metric.icon)
-                            Text(metric.rawValue)
-                        }
-                        .tag(metric)
+                        Text(metric.rawValue)
+                            .tag(metric)
                     }
                 }
                 .pickerStyle(SegmentedPickerStyle())
@@ -33,13 +31,13 @@ struct WeeklyFitnessView: View {
             .navigationTitle("Weekly Fitness")
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
-                weeklyViewModel.loadWeeklyData(for: weeklyViewModel.selectedMetric, settings: mainViewModel.settings)
+                weeklyViewModel.loadWeeklyData(for: selectedMetric, settings: mainViewModel.settings)
             }
-            .onChange(of: weeklyViewModel.selectedMetric) { oldMetric, newMetric in
+            .onChange(of: selectedMetric) { oldMetric, newMetric in
                 weeklyViewModel.loadWeeklyData(for: newMetric, settings: mainViewModel.settings)
             }
             .refreshable {
-                weeklyViewModel.refreshData(for: weeklyViewModel.selectedMetric, settings: mainViewModel.settings)
+                weeklyViewModel.refreshData(for: selectedMetric, settings: mainViewModel.settings)
             }
         }
     }
@@ -127,6 +125,12 @@ private struct WeeklyFitnessCard: View {
         if weekData.isSuccessful {
             return "checkmark.circle.fill"
         } else {
+            // For weight, unsuccessful means moving away from goal - always X
+            if weekData.type == .weight {
+                return "xmark.circle.fill"
+            }
+            
+            // For other metrics, use percentage-based icons
             let percentage = weekData.progressPercentage
             if percentage >= 0.8 {
                 return "checkmark.circle"
@@ -174,10 +178,26 @@ private struct WeeklyFitnessCard: View {
                     
                     Spacer()
                     
-                    Text(weekData.isSuccessful ? "Success" : "Needs Work")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(progressColor)
+                    if weekData.type == .weight {
+                        if let message = weekData.weightProgressMessage {
+                            Text(message)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(progressColor)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                        } else {
+                            Text(weekData.isSuccessful ? "Good Progress" : "Keep Working")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(progressColor)
+                        }
+                    } else {
+                        Text(weekData.isSuccessful ? "Success" : "Needs Work")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(progressColor)
+                    }
                 }
                 
                 GeometryReader { geometry in
@@ -240,14 +260,15 @@ private struct WeeklyFitnessCard: View {
             // Weight-specific info
             if weekData.type == .weight, let prevWeight = weekData.previousWeekAverage {
                 let change = weekData.dailyAverage - prevWeight
-                let changeText = change >= 0 ? "+\(String(format: "%.1f", change))" : "\(String(format: "%.1f", change))"
+                let settings = TrackingSettings.load()
+                let changeText = change >= 0 ? "+\(settings.displayWeight(abs(change)))" : "-\(settings.displayWeight(abs(change)))"
                 
                 HStack {
                     Image(systemName: "arrow.up.arrow.down")
                         .foregroundColor(.blue)
                         .font(.caption)
                     
-                    Text("Change from last week: \(changeText) kg")
+                    Text("Change from last week: \(changeText)")
                         .font(.caption)
                         .foregroundColor(.blue)
                     
@@ -279,5 +300,5 @@ private struct WeeklyFitnessCard: View {
 
 #Preview {
     let viewModel = FitKingViewModel()
-    WeeklyFitnessView(mainViewModel: viewModel)
+    WeeklyFitnessView(mainViewModel: viewModel, selectedMetric: .constant(.weight))
 } 

@@ -16,14 +16,14 @@
 			containerPortal = 367E47FE2CE5143E00D237F4 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 367E48052CE5143E00D237F4;
-			remoteInfo = FitKing;
+			remoteInfo = StepKing;
 		};
 		367E48212CE5144000D237F4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 367E47FE2CE5143E00D237F4 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 367E48052CE5143E00D237F4;
-			remoteInfo = FitKing;
+			remoteInfo = StepKing;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -33,24 +33,29 @@
 		367E48202CE5144000D237F4 /* FitKingUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FitKingUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		367E48602CE531EA00D237F4 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		367E48622CE531EA00D237F4 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		367E487A2CE532CF00D237F4 /* fitKingWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = fitKingWidgetExtension.entitlements; sourceTree = "<group>"; };
+		367E487A2CE532CF00D237F4 /* widgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = widgetExtension.entitlements; sourceTree = "<group>"; };
 		36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		367E48082CE5143E00D237F4 /* FitKing */ = {
+		367E48082CE5143E00D237F4 /* StepKing */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FitKing;
+			path = StepKing;
 			sourceTree = "<group>";
 		};
-		367E48192CE5144000D237F4 /* FitKingTests */ = {
+		367E48192CE5144000D237F4 /* StepKingTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FitKingTests;
+			path = StepKingTests;
 			sourceTree = "<group>";
 		};
-		367E48232CE5144000D237F4 /* FitKingUITests */ = {
+		367E48232CE5144000D237F4 /* StepKingUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FitKingUITests;
+			path = StepKingUITests;
+			sourceTree = "<group>";
+		};
+		367E48642CE531EA00D237F4 /* widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = widget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -84,10 +89,11 @@
 			isa = PBXGroup;
 			children = (
 				36C8B9BE2CE5474E001FD2C6 /* Launch Screen.storyboard */,
-				367E487A2CE532CF00D237F4 /* fitKingWidgetExtension.entitlements */,
-				367E48082CE5143E00D237F4 /* FitKing */,
-				367E48192CE5144000D237F4 /* FitKingTests */,
-				367E48232CE5144000D237F4 /* FitKingUITests */,
+				367E487A2CE532CF00D237F4 /* widgetExtension.entitlements */,
+				367E48082CE5143E00D237F4 /* StepKing */,
+				367E48192CE5144000D237F4 /* StepKingTests */,
+				367E48232CE5144000D237F4 /* StepKingUITests */,
+				367E48642CE531EA00D237F4 /* widget */,
 				367E485F2CE531EA00D237F4 /* Frameworks */,
 				367E48072CE5143E00D237F4 /* Products */,
 			);
@@ -128,12 +134,12 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				367E48082CE5143E00D237F4 /* FitKing */,
+				367E48082CE5143E00D237F4 /* StepKing */,
 			);
 			name = FitKing;
 			packageProductDependencies = (
 			);
-			productName = FitKing;
+			productName = StepKing;
 			productReference = 367E48062CE5143E00D237F4 /* FitKing.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -151,12 +157,12 @@
 				367E48182CE5144000D237F4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				367E48192CE5144000D237F4 /* FitKingTests */,
+				367E48192CE5144000D237F4 /* StepKingTests */,
 			);
 			name = FitKingTests;
 			packageProductDependencies = (
 			);
-			productName = FitKingTests;
+			productName = StepKingTests;
 			productReference = 367E48162CE5144000D237F4 /* FitKingTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
@@ -174,12 +180,12 @@
 				367E48222CE5144000D237F4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				367E48232CE5144000D237F4 /* FitKingUITests */,
+				367E48232CE5144000D237F4 /* StepKingUITests */,
 			);
 			name = FitKingUITests;
 			packageProductDependencies = (
 			);
-			productName = FitKingUITests;
+			productName = StepKingUITests;
 			productReference = 367E48202CE5144000D237F4 /* FitKingUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
@@ -347,7 +353,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PROJECT_APP_GROUP = group.com.sloaninnovation.FitKing;
+				PROJECT_APP_GROUP = group.com.sloaninnovation.StepKing;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -404,7 +410,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PROJECT_APP_GROUP = group.com.sloaninnovation.FitKing;
+				PROJECT_APP_GROUP = group.com.sloaninnovation.StepKing;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -423,8 +429,9 @@
 				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your fitness progress including weight, calories, carbohydrates, and protein intake.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your fitness progress and goals.";
+				INFOPLIST_FILE = FitKing/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your step count data to track your daily progress and help you reach your goals.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your daily progress.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -456,8 +463,9 @@
 				DEVELOPMENT_TEAM = M5G6TGAR9L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your fitness progress including weight, calories, carbohydrates, and protein intake.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your fitness progress and goals.";
+				INFOPLIST_FILE = FitKing/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your step count data to track your daily progress and help you reach your goals.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need access to update your health data to track your daily progress.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -484,14 +492,15 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M5G6TGAR9L;
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.FitKingTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKingTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FitKing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FitKing";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StepKing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StepKing";
 			};
 			name = Debug;
 		};
@@ -502,14 +511,15 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M5G6TGAR9L;
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.FitKingTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKingTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FitKing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FitKing";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StepKing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StepKing";
 			};
 			name = Release;
 		};
@@ -518,13 +528,14 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.FitKingUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKingUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = FitKing;
+				TEST_TARGET_NAME = StepKing;
 			};
 			name = Debug;
 		};
@@ -533,13 +544,14 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.FitKingUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sloaninnovation.StepKingUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = FitKing;
+				TEST_TARGET_NAME = StepKing;
 			};
 			name = Release;
 		};

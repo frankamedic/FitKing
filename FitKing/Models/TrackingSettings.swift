@@ -1,5 +1,17 @@
 import Foundation
 
+enum WeightUnit: String, CaseIterable, Codable {
+    case kilograms = "kg"
+    case pounds = "lbs"
+    
+    var displayName: String {
+        switch self {
+        case .kilograms: return "Kilograms (kg)"
+        case .pounds: return "Pounds (lbs)"
+        }
+    }
+}
+
 struct TrackingSettings: Codable {
     var startTime: Date
     var endTime: Date
@@ -7,6 +19,7 @@ struct TrackingSettings: Codable {
     var maxDailyCarbs: Int
     var targetProtein: Int
     var goalWeight: Double
+    var weightUnit: WeightUnit
     var notificationFrequency: TimeInterval // in minutes
     
     static let `default` = TrackingSettings(
@@ -16,6 +29,7 @@ struct TrackingSettings: Codable {
         maxDailyCarbs: 250,
         targetProtein: 150,
         goalWeight: 70.0,
+        weightUnit: .kilograms,
         notificationFrequency: 60
     )
     
@@ -99,6 +113,17 @@ struct TrackingSettings: Codable {
         }
         
         return tomorrowStart
+    }
+    
+    // Weight display method
+    func displayWeight(_ weight: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        
+        let formattedWeight = formatter.string(from: NSNumber(value: weight)) ?? String(format: "%.1f", weight)
+        return "\(formattedWeight) \(weightUnit.rawValue)"
     }
 }
 

@@ -63,23 +63,39 @@ struct SettingsView: View {
             }
             
             Section(header: Text("Weight Goal")) {
+                Picker("Weight Unit", selection: Binding(
+                    get: { viewModel.settings.weightUnit },
+                    set: { viewModel.settings.weightUnit = $0 }
+                )) {
+                    ForEach(WeightUnit.allCases, id: \.self) { unit in
+                        Text(unit.displayName).tag(unit)
+                    }
+                }
+                
                 HStack {
                     Text("Goal Weight")
                     Spacer()
-                    TextField(
-                        "70.0",
-                        value: Binding(
-                            get: { viewModel.settings.goalWeight },
-                            set: { viewModel.settings.goalWeight = $0 }
-                        ),
-                        format: .number.precision(.fractionLength(1))
-                    )
-                    .keyboardType(.decimalPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: 80)
-                    
-                    Text("kg")
-                        .foregroundColor(.secondary)
+                    Picker("Goal Weight", selection: Binding(
+                        get: { 
+                            return Int(viewModel.settings.goalWeight) // Whole numbers only
+                        },
+                        set: { 
+                            viewModel.settings.goalWeight = Double($0)
+                        }
+                    )) {
+                        if viewModel.settings.weightUnit == .kilograms {
+                            ForEach(30...150, id: \.self) { weight in
+                                Text("\(weight) kg")
+                                    .tag(weight)
+                            }
+                        } else {
+                            ForEach(66...330, id: \.self) { weight in
+                                Text("\(weight) lbs")
+                                    .tag(weight)
+                            }
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
                 }
             }
             
@@ -87,58 +103,43 @@ struct SettingsView: View {
                 HStack {
                     Text("Max Daily Calories")
                     Spacer()
-                    TextField(
-                        "2000",
-                        value: Binding(
-                            get: { viewModel.settings.maxDailyCalories },
-                            set: { viewModel.settings.maxDailyCalories = $0 }
-                        ),
-                        format: .number
-                    )
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: 80)
-                    
-                    Text("cal")
-                        .foregroundColor(.secondary)
+                    Picker("Max Daily Calories", selection: Binding(
+                        get: { viewModel.settings.maxDailyCalories },
+                        set: { viewModel.settings.maxDailyCalories = $0 }
+                    )) {
+                        ForEach(Array(stride(from: 1000, through: 4000, by: 50)), id: \.self) { calories in
+                            Text("\(calories) cal").tag(calories)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
                 }
                 
                 HStack {
                     Text("Max Daily Carbs")
                     Spacer()
-                    TextField(
-                        "250",
-                        value: Binding(
-                            get: { viewModel.settings.maxDailyCarbs },
-                            set: { viewModel.settings.maxDailyCarbs = $0 }
-                        ),
-                        format: .number
-                    )
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: 80)
-                    
-                    Text("g")
-                        .foregroundColor(.secondary)
+                    Picker("Max Daily Carbs", selection: Binding(
+                        get: { viewModel.settings.maxDailyCarbs },
+                        set: { viewModel.settings.maxDailyCarbs = $0 }
+                    )) {
+                        ForEach(Array(stride(from: 0, through: 500, by: 10)), id: \.self) { carbs in
+                            Text("\(carbs) g").tag(carbs)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
                 }
                 
                 HStack {
                     Text("Target Protein")
                     Spacer()
-                    TextField(
-                        "150",
-                        value: Binding(
-                            get: { viewModel.settings.targetProtein },
-                            set: { viewModel.settings.targetProtein = $0 }
-                        ),
-                        format: .number
-                    )
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: 80)
-                    
-                    Text("g")
-                        .foregroundColor(.secondary)
+                    Picker("Target Protein", selection: Binding(
+                        get: { viewModel.settings.targetProtein },
+                        set: { viewModel.settings.targetProtein = $0 }
+                    )) {
+                        ForEach(Array(stride(from: 50, through: 300, by: 5)), id: \.self) { protein in
+                            Text("\(protein) g").tag(protein)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
                 }
             }
             

@@ -10,36 +10,40 @@ extension Double {
     }
 }
 
-// Main progress view that shows:
-// - Current fitness metrics and targets
-// - Progress visualization for each metric
-// - Time remaining information
-// - Success/warning indicators
+// Main today view that shows:
+// - Top row: Visually appealing nutrition cards with progress rings
+// - Bottom: Engaging weight section with trend visualization
 struct ProgressView: View {
     @ObservedObject var viewModel: FitKingViewModel
+    @Binding var selectedTab: Int
+    @Binding var selectedMetric: FitnessMetricType
     
-    // Main view layout:
-    // - Shows error view if there's an error
-    // - Displays current progress section for all metrics
-    // - Shows time info and motivational messages
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 if let error = viewModel.error {
                     ErrorView(message: error)
                 } else {
                     // Header section
                     HeaderSection(viewModel: viewModel)
                     
-                    // Fitness metrics grid
-                    FitnessMetricsGrid(viewModel: viewModel)
+                    // Top row: Nutrition cards with progress rings
+                    NutritionMetricsRow(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
                     
-                    // Time info section
-                    TimeSection(viewModel: viewModel)
+                    // Bottom: Engaging weight section
+                    WeightDetailSection(viewModel: viewModel, selectedTab: $selectedTab, selectedMetric: $selectedMetric)
                 }
             }
             .padding()
         }
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [Color.black, Color(.systemGray6).opacity(0.3)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
     }
 }
 
@@ -64,7 +68,7 @@ private struct ErrorView: View {
     }
 }
 
-// Shows header information and overall success status
+// Enhanced header with better visual appeal
 private struct HeaderSection: View {
     @ObservedObject var viewModel: FitKingViewModel
     
@@ -75,317 +79,403 @@ private struct HeaderSection: View {
     }
     
     var body: some View {
-        VStack(spacing: 8) {
-            if overallSuccessful {
-                Text("👑")
-                    .font(.system(size: 64))
-                
-                Text("🎉 All Goals Met! 🎉")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundColor(.green)
-            } else {
-                Text("💪")
-                    .font(.system(size: 64))
-                
-                Text("Today's Progress")
-                    .font(.title)
-                    .fontWeight(.bold)
-            }
-            
-            Text("Keep tracking your fitness goals")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        VStack(spacing: 12) {
+            Text("Today")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.primary, .secondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
         }
         .frame(maxWidth: .infinity)
-        .padding()
+        .padding(.vertical, 20)
     }
 }
 
-// Displays all fitness metrics in a grid layout
-private struct FitnessMetricsGrid: View {
+// Enhanced nutrition cards with progress rings
+private struct NutritionMetricsRow: View {
     @ObservedObject var viewModel: FitKingViewModel
+    @Binding var selectedTab: Int
+    @Binding var selectedMetric: FitnessMetricType
     
-    let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
+    let nutritionMetrics: [FitnessMetricType] = [.calories, .carbs, .protein]
     
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            ForEach(FitnessMetricType.allCases, id: \.self) { metric in
-                FitnessMetricCard(
+        HStack(spacing: 16) {
+            ForEach(nutritionMetrics, id: \.self) { metric in
+                EnhancedNutritionCard(
                     metric: metric,
                     current: viewModel.getCurrentValue(for: metric),
                     target: viewModel.getTarget(for: metric),
-                    status: viewModel.getProgressStatus(for: metric)
+                    status: viewModel.getProgressStatus(for: metric),
+                    settings: viewModel.settings,
+                    selectedTab: $selectedTab,
+                    selectedMetric: $selectedMetric
                 )
             }
         }
     }
 }
 
-// Individual metric card showing current value, target, and progress
-private struct FitnessMetricCard: View {
+// Visually appealing nutrition card with progress ring
+private struct EnhancedNutritionCard: View {
     let metric: FitnessMetricType
     let current: Double
     let target: Double
     let status: ProgressStatus
+    let settings: TrackingSettings
+    @Binding var selectedTab: Int
+    @Binding var selectedMetric: FitnessMetricType
+    
+    private var progressPercentage: Double {
+        switch metric {
+        case .calories, .carbs:
+            return min(current / target, 1.5) // Cap at 150% for visual purposes
+        case .protein:
+            return min(current / target, 1.5)
+        case .weight:
+            return 0
+        }
+    }
+    
+    private var cardGradient: LinearGradient {
+        switch metric {
+        case .calories:
+            return LinearGradient(
+                colors: status.isSuccess ? [.green.opacity(0.8), .mint.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .carbs:
+            return LinearGradient(
+                colors: status.isSuccess ? [.green.opacity(0.8), .yellow.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .protein:
+            return LinearGradient(
+                colors: status.isSuccess ? [.blue.opacity(0.8), .purple.opacity(0.6)] : [.orange.opacity(0.8), .red.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .weight:
+            return LinearGradient(colors: [.clear], startPoint: .top, endPoint: .bottom)
+        }
+    }
+    
+    private var formattedCurrent: String {
+        switch metric {
+        case .calories:
+            return "\(Int(current))"
+        case .carbs, .protein:
+            return "\(Int(current))g"
+        case .weight:
+            return ""
+        }
+    }
+    
+    private var progressText: String {
+        switch metric {
+        case .calories, .carbs:
+            if current <= target {
+                let remaining = target - current
+                let percentage = (remaining / target * 100).rounded(to: 0)
+                return "\(Int(percentage))% left"
+            } else {
+                let over = current - target
+                let percentage = (over / target * 100).rounded(to: 0)
+                return "\(Int(percentage))% over"
+            }
+        case .protein:
+            if current >= target {
+                let over = current - target
+                let percentage = (over / target * 100).rounded(to: 0)
+                return "\(Int(percentage))% over"
+            } else {
+                let remaining = target - current
+                let percentage = (remaining / target * 100).rounded(to: 0)
+                return "\(Int(percentage))% left"
+            }
+        case .weight:
+            return ""
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // Progress ring with icon
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(Color.white.opacity(0.3), lineWidth: 6)
+                    .frame(width: 60, height: 60)
+                
+                // Progress ring
+                Circle()
+                    .trim(from: 0, to: min(progressPercentage, 1.0))
+                    .stroke(
+                        Color.white,
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .frame(width: 60, height: 60)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 1.0), value: progressPercentage)
+                
+                // Icon
+                Image(systemName: metric.icon)
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .fontWeight(.semibold)
+            }
+            
+            // Metric info
+            VStack(spacing: 4) {
+                Text(metric.rawValue)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.9))
+                    .fontWeight(.medium)
+                
+                Text(formattedCurrent)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(progressText)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.8))
+                    .fontWeight(.medium)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 20)
+        .background(cardGradient)
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+        .onTapGesture {
+            // Set the specific metric and switch to Weekly tab
+            selectedMetric = metric
+            selectedTab = 1
+        }
+        .scaleEffect(1.0)
+        .animation(.easeInOut(duration: 0.1), value: selectedTab)
+    }
+}
+
+// Detailed weight section showing 4 weeks of data
+private struct WeightDetailSection: View {
+    @ObservedObject var viewModel: FitKingViewModel
+    @Binding var selectedTab: Int
+    @Binding var selectedMetric: FitnessMetricType
+    @State private var weeklyWeightData: [WeeklyFitnessData] = []
+    @State private var isLoading = true
     @Environment(\.colorScheme) var colorScheme
+    
+    private var settings: TrackingSettings {
+        viewModel.settings
+    }
     
     private var cardBackgroundColor: Color {
         colorScheme == .dark ? Color(.systemGray6) : .white
     }
     
-    private var progressColor: Color {
-        Color(status.color == "green" ? .green : 
-              status.color == "yellow" ? .yellow : 
-              status.color == "orange" ? .orange : .red)
+    private var currentWeight: Double {
+        viewModel.getCurrentValue(for: .weight)
     }
     
-    private var formattedCurrent: String {
-        switch metric {
-        case .weight:
-            return String(format: "%.1f kg", current)
-        case .calories:
-            return "\(Int(current)) cal"
-        case .carbs, .protein:
-            return "\(Int(current))g"
-        }
+    private var targetWeight: Double {
+        viewModel.getTarget(for: .weight)
     }
     
-    private var formattedTarget: String {
-        switch metric {
-        case .weight:
-            return String(format: "%.1f kg", target)
-        case .calories:
-            return "\(Int(target)) cal max"
-        case .carbs:
-            return "\(Int(target))g max"
-        case .protein:
-            return "\(Int(target))g target"
-        }
+    private var overallAverage: Double {
+        guard !weeklyWeightData.isEmpty else { return 0 }
+        let total = weeklyWeightData.reduce(0) { $0 + $1.dailyAverage }
+        return total / Double(weeklyWeightData.count)
     }
     
-    private var statusText: String {
-        switch metric {
-        case .weight:
-            let distance = abs(current - target)
-            if distance <= 1.0 {
-                return "On Target"
-            } else {
-                return String(format: "%.1f kg away", distance)
-            }
-        case .calories, .carbs:
-            if current <= target {
-                return "Under Limit"
-            } else {
-                return "Over Limit"
-            }
-        case .protein:
-            if current >= target {
-                return "Target Met"
-            } else {
-                return "\(Int(target - current))g needed"
-            }
-        }
+    private var averageWeightLoss: Double {
+        guard weeklyWeightData.count >= 2 else { return 0 }
+        let sortedData = weeklyWeightData.sorted { $0.weekStartDate < $1.weekStartDate }
+        let firstWeek = sortedData.first!
+        let lastWeek = sortedData.last!
+        let totalChange = firstWeek.dailyAverage - lastWeek.dailyAverage
+        let weeksBetween = weeklyWeightData.count - 1
+        return weeksBetween > 0 ? totalChange / Double(weeksBetween) : 0
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
+        VStack(alignment: .leading, spacing: 16) {
+            // Weight header
             HStack {
-                Image(systemName: metric.icon)
-                    .foregroundColor(progressColor)
+                Image(systemName: "scalemass")
+                    .foregroundColor(.blue)
                     .font(.title2)
                 
-                Text(metric.rawValue)
+                Text("Weight Progress")
                     .font(.headline)
                     .fontWeight(.semibold)
                 
                 Spacer()
                 
-                Image(systemName: status.isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundColor(progressColor)
-                    .font(.title3)
-            }
-            
-            // Current value
-            HStack {
-                Text("Current")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text(formattedCurrent)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(progressColor)
-            }
-            
-            // Target value
-            HStack {
-                Text("Target")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text(formattedTarget)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            
-            // Progress bar (for protein and calories/carbs)
-            if metric == .protein || metric == .calories || metric == .carbs {
-                VStack(spacing: 4) {
-                    HStack {
-                        Text("Progress")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("\(Int(min(status.percentage * 100, 100)))%")
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .foregroundColor(progressColor)
-                    }
-                    
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 4)
-                                .cornerRadius(2)
-                            
-                            Rectangle()
-                                .fill(progressColor)
-                                .frame(
-                                    width: geometry.size.width * min(status.percentage, 1.0),
-                                    height: 4
-                                )
-                                .cornerRadius(2)
-                        }
-                    }
-                    .frame(height: 4)
+                if isLoading {
+                    SwiftUI.ProgressView()
+                        .scaleEffect(0.8)
                 }
             }
             
-            // Status text
-            Text(statusText)
-                .font(.caption)
-                .foregroundColor(progressColor)
-                .fontWeight(.medium)
+            if !isLoading {
+                // Current weight and target
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(settings.displayWeight(currentWeight))
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Target")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(settings.displayWeight(targetWeight))
+                            .font(.title2)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                // 4-week average summary
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Last 4 Weeks Summary")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Average Weight")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(settings.displayWeight(overallAverage))
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                        }
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("Avg Change/Week")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            let changeText = averageWeightLoss > 0 ? 
+                                "-\(settings.displayWeight(averageWeightLoss))" : 
+                                averageWeightLoss < 0 ? 
+                                "+\(settings.displayWeight(abs(averageWeightLoss)))" : 
+                                "No change"
+                            
+                            Text(changeText)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(averageWeightLoss > 0 ? .green : 
+                                               averageWeightLoss < 0 ? .red : .orange)
+                        }
+                    }
+                }
+                
+                // Weekly breakdown
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Weekly Breakdown")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    ForEach(weeklyWeightData.sorted { $0.weekStartDate > $1.weekStartDate }) { week in
+                        WeeklyWeightRow(weekData: week, settings: settings)
+                    }
+                }
+            }
         }
         .padding()
         .background(cardBackgroundColor)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 1)
+        .onTapGesture {
+            // Set weight metric and switch to Weekly tab
+            selectedMetric = .weight
+            selectedTab = 1
+        }
+        .onAppear {
+            loadWeightData()
+        }
+    }
+    
+    private func loadWeightData() {
+        let settings = TrackingSettings.load()
+        HealthKitManager.shared.getWeeklyFitnessData(for: .weight, weeks: 5, settings: settings) { data, error in
+            DispatchQueue.main.async {
+                // Take only the first 4 weeks for display, but we have 5 weeks for calculations
+                self.weeklyWeightData = Array(data.prefix(4))
+                self.isLoading = false
+            }
+        }
     }
 }
 
-// Displays time-related information and motivational messages
-private struct TimeSection: View {
-    @ObservedObject var viewModel: FitKingViewModel
+// Individual weekly weight row
+private struct WeeklyWeightRow: View {
+    let weekData: WeeklyFitnessData
+    let settings: TrackingSettings
     
-    // Timer management using Combine
-    // Updates every second for smooth countdown
-    @State private var currentTime = Date()
-    private let timer = Timer.publish(every: 1.0, on: .main, in: .common)
-    @State private var timerCancellable: AnyCancellable?
-    
-    // Gets end time from settings
-    private var endTime: Date {
-        viewModel.settings.todayEndTime
-    }
-    
-    // Calculates remaining time until end time
-    private var timeRemaining: TimeInterval {
-        currentTime.distance(to: endTime)
-    }
-    
-    // Formats remaining time as HH:MM:SS
-    // Shows "Time's up!" when time has expired
-    private var formattedTimeRemaining: String {
-        if timeRemaining <= 0 {
-            return "Day complete!"
-        }
-        let hours = Int(timeRemaining) / 3600
-        let minutes = (Int(timeRemaining) % 3600) / 60
-        let seconds = Int(timeRemaining) % 60
-        
-        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-    }
-    
-    // Provides motivational messages based on progress
-    private var motivationalMessage: String {
-        let successfulMetrics = FitnessMetricType.allCases.filter { metric in
-            viewModel.getProgressStatus(for: metric).isSuccess
-        }
-        
-        if successfulMetrics.count == FitnessMetricType.allCases.count {
-            return "Amazing! All your fitness goals are on track! 🎉"
-        } else if successfulMetrics.count >= 3 {
-            return "Great progress! You're doing well with most of your goals! 💪"
-        } else if successfulMetrics.count >= 2 {
-            return "Good work! Keep focusing on your remaining goals! 👍"
-        } else if successfulMetrics.count >= 1 {
-            return "You're getting started! Focus on improving other metrics! 🌟"
-        } else {
-            return "Let's get moving! Every step towards your goals counts! 🚀"
-        }
+    private var changeText: String? {
+        guard let prevWeight = weekData.previousWeekAverage else { return nil }
+        let change = weekData.dailyAverage - prevWeight
+        if abs(change) < 0.1 { return nil } // Don't show very small changes
+        return change > 0 ? "+\(settings.displayWeight(abs(change)))" : "-\(settings.displayWeight(abs(change)))"
     }
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Time remaining
-            VStack(spacing: 8) {
-                Text("Time Remaining Today")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Text(formattedTimeRemaining)
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundColor(.blue)
-                    .monospacedDigit()
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-            
-            // Motivational message
-            VStack(spacing: 8) {
-                Text("Daily Motivation")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Text(motivationalMessage)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(weekData.weekLabel)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Text(weekData.dateRange)
+                    .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(settings.displayWeight(weekData.dailyAverage))
+                    .font(.caption)
+                    .fontWeight(.bold)
+                
+                if let change = changeText {
+                    Text(change)
+                        .font(.caption2)
+                        .foregroundColor(change.hasPrefix("+") ? .red : .green)
+                }
+            }
         }
-        .onAppear {
-            // Start the timer when view appears
-            timerCancellable = timer.connect()
-        }
-        .onDisappear {
-            // Stop the timer when view disappears
-            timerCancellable?.cancel()
-        }
-        .onReceive(timer) { time in
-            currentTime = time
-        }
+        .padding(.vertical, 4)
     }
 }
 
 #Preview {
     let viewModel = FitKingViewModel()
-    ProgressView(viewModel: viewModel)
+    ProgressView(viewModel: viewModel, selectedTab: .constant(0), selectedMetric: .constant(.weight))
 } 
