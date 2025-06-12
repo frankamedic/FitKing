@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "Image 1024x1024 2.png",
+      "filename" : "FitKing 1.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Image 1024x1024.png",
+      "filename" : "FitKing 2.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "Image 1024x1024 1.png",
+      "filename" : "FitKing 3.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
